@@ -1,0 +1,182 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Door Face Panels - Caregiver Dashboard</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+</head>
+<body>
+    <!-- Header -->
+    <header>
+        <h1>🔐 Door Face Panels</h1>
+        <p>Smart Door Security & Anomaly Detection System</p>
+    </header>
+
+    <!-- Navigation -->
+    <nav>
+        <a href="#" onclick="showTab('dashboard')" class="active">Dashboard</a>
+        <a href="#" onclick="showTab('alerts')">Alerts</a>
+        <a href="#" onclick="showTab('logs')">Access Logs</a>
+        <a href="#" onclick="showTab('compliance')">Compliance</a>
+    </nav>
+
+    <!-- Main Container -->
+    <div class="container">
+        <!-- Dashboard Tab -->
+        <div id="dashboard" class="tab-content">
+            <h2>System Overview</h2>
+            
+            <!-- Statistics Cards -->
+            <div class="grid">
+                <div class="card">
+                    <h3>Total Entries Today</h3>
+                    <div class="card-value" id="total-entries">0</div>
+                    <div class="card-label">Entry Events</div>
+                </div>
+
+                <div class="card">
+                    <h3>Total Exits Today</h3>
+                    <div class="card-value" id="total-exits">0</div>
+                    <div class="card-label">Exit Events</div>
+                </div>
+
+                <div class="card">
+                    <h3>Active Alerts</h3>
+                    <div class="card-value" id="active-alerts">0</div>
+                    <div class="card-label">
+                        <span class="status critical">Critical/High</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <h3>System Status</h3>
+                    <div class="card-value" style="color: #28a745; font-size: 24px;">🟢</div>
+                    <div class="card-label">
+                        <span class="status healthy">Operational</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent Activity -->
+            <h3 style="margin-top: 30px;">Recent Access Activity</h3>
+            <div class="chart-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Person ID</th>
+                            <th>Name</th>
+                            <th>Type</th>
+                            <th>Status</th>
+                            <th>Confidence</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table-body">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: #999;">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <button onclick="refreshData()" style="margin-top: 15px;">
+                🔄 Refresh Data
+            </button>
+        </div>
+
+        <!-- Alerts Tab -->
+        <div id="alerts" class="tab-content" style="display: none;">
+            <h2>Active Alerts & Anomalies</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Real-time alerts for security threats and behavioral anomalies
+            </p>
+
+            <div id="alerts-container">
+                <p style="text-align: center; color: #999;">Loading alerts...</p>
+            </div>
+
+            <!-- Alert Filters -->
+            <div style="margin-top: 20px;">
+                <button onclick="loadThreats('HIGH')">High Severity</button>
+                <button onclick="loadThreats('CRITICAL')" class="btn-danger">Critical Only</button>
+                <button onclick="loadThreats()" style="background: #6c757d;">All Alerts</button>
+            </div>
+        </div>
+
+        <!-- Logs Tab -->
+        <div id="logs" class="tab-content" style="display: none;">
+            <h2>Complete Access Logs</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Full audit trail of all door access events
+            </p>
+
+            <div class="chart-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Person ID</th>
+                            <th>Name</th>
+                            <th>Access Type</th>
+                            <th>Status</th>
+                            <th>Confidence</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="logs-table-body">
+                        <tr>
+                            <td colspan="6" style="text-align: center; color: #999;">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <button onclick="loadAccessLogs(null, 50)">Load More</button>
+            </div>
+        </div>
+
+        <!-- Compliance Tab -->
+        <div id="compliance" class="tab-content" style="display: none;">
+            <h2>PIPEDA Compliance & Audit Trail</h2>
+            <p style="color: #666; margin-bottom: 20px;">
+                Complete audit log for regulatory compliance (PIPEDA, GDPR)
+            </p>
+
+            <div class="chart-container">
+                <table>
+                    <thead>
+                        <tr>
+                            <th>Action</th>
+                            <th>User/System</th>
+                            <th>Resource</th>
+                            <th>Result</th>
+                            <th>Timestamp</th>
+                        </tr>
+                    </thead>
+                    <tbody id="audit-table-body">
+                        <tr>
+                            <td colspan="5" style="text-align: center; color: #999;">Loading...</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+
+            <div style="margin-top: 15px;">
+                <button onclick="loadAuditLog(100)">Load Full Audit Log</button>
+                <a href="/api/compliance/audit?format=csv" class="btn">
+                    📥 Export as CSV
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <!-- Footer -->
+    <footer>
+        <p>Door Face Panels v0.1.0 | Smart Door Security System for Elderly Care</p>
+        <p>© 2026 Douglas College CSIS 4495 Applied Research Project</p>
+    </footer>
+
+    <script src="{{ url_for('static', filename='js/dashboard.js') }}"></script>
+</body>
+</html>

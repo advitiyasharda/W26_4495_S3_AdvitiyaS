@@ -55,10 +55,10 @@ FaceDoor provides:
                                                       │
                               ┌───────────────────────▼──────────────┐
                               │  SQLite Database  (data/doorface.db) │
-                              │  Tables: users, access_logs,          │
-                              │          threats, anomalies,          │
-                              │          audit_logs,                  │
-                              │          behavioral_profiles          │
+                              │  Tables: users, access_logs,         │
+                              │          threats, anomalies,         │
+                              │          audit_logs,                 │
+                              │          behavioral_profiles         │
                               └──────────────────────────────────────┘
 ```
 

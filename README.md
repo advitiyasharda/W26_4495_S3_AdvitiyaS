@@ -20,6 +20,7 @@ A facial recognition-based access control and monitoring system designed for eld
   - [Diagnostics](#diagnostics)
 - [API Reference](#api-reference)
 - [Dashboard Pages](#dashboard-pages)
+- [Screenshots](#screenshots)
 - [Configuration](#configuration)
 - [Compliance](#compliance)
 - [Scripts](#scripts)
@@ -276,6 +277,22 @@ curl "http://localhost:5000/api/logs?limit=20"
 | Audit Trail | `/compliance` | PIPEDA-compliant audit log with CSV export                       |
 
 > **Demo mode:** When the database has no registered faces, all pages automatically show realistic demo data. A yellow `Demo data` badge appears in the page header. Demo data disappears as soon as real users are registered.
+
+---
+
+## Screenshots
+
+### Dashboard
+![Dashboard](screenshots/dashboard.png)
+
+### Alerts
+![Alerts](screenshots/alerts.png)
+
+### Access Logs
+![Access Logs](screenshots/access-logs.png)
+
+### Audit Trail
+![Audit Trail](screenshots/audit-trail.png)
 
 ---
 

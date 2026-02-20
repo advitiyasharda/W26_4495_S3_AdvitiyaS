@@ -53,13 +53,13 @@ FaceDoor provides:
 └─────────────────────────────┘        │  /api/compliance/audit       │
                                        └──────────────┬───────────────┘
                                                       │
-                              ┌───────────────────────▼──────────────┐
-                              │  SQLite Database  (data/doorface.db) │
-                              │  Tables: users, access_logs,         │
-                              │          threats, anomalies,         │
-                              │          audit_logs,                 │
-                              │          behavioral_profiles         │
-                              └──────────────────────────────────────┘
+                              ┌───────────────────────▼───────────────┐
+                              │  SQLite Database  (data/doorface.db)  │
+                              │  Tables: users, access_logs,          │
+                              │          threats, anomalies,          │
+                              │          audit_logs,                  │
+                              │          behavioral_profiles          │
+                              └───────────────────────────────────────┘
 ```
 
 The Next.js dev server proxies all `/api/*` requests to Flask automatically — no CORS issues during development.

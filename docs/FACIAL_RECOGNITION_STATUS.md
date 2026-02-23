@@ -45,22 +45,22 @@ python scripts/quick_test_recognition.py
 ## 📚 What You Have
 
 ### Testing & Verification Scripts
-✅ **quick_test_recognition.py** - Main testing tool
+✅ **scripts/quick_test_recognition.py** - Main testing tool
 - Test accuracy on stored photos
 - Live webcam testing
 - Shows statistics
 
-✅ **diagnose_recognition.py** - Troubleshooting tool
+✅ **scripts/diagnose_recognition.py** - Troubleshooting tool
 - Checks camera, detection, registration, database
 - Identifies and solves problems
 
-✅ **test_face_recognition_real.py** - Extended testing
+✅ **tests/test_face_recognition_real.py** - Extended testing
 - Detailed test scenarios
 - Component testing
 
 ### Capture & Registration
-✅ **capture_faces.py** - Capture from webcam  
-✅ **register_faces.py** - Register photos
+✅ **scripts/capture_faces.py** - Capture from webcam
+✅ **scripts/register_faces.py** - Register photos
 
 ### Core System
 ✅ **api/facial_recognition.py** - Recognition engine (FIXED)
@@ -121,7 +121,7 @@ def recognize_face(...):
             'confidence': confidence}  # Real!
 ```
 
-**File 2: `register_faces.py`**
+**File 2: `scripts/register_faces.py`**
 ```python
 # BEFORE: Random encodings
 encoding = np.random.rand(128)  # Wrong!
@@ -355,8 +355,8 @@ python scripts/register_faces.py             # View stats (option 4)
 python main.py                       # Runs on localhost:5000
 
 # Advanced testing
-python test_facial_recognition.py    # Component tests
-python test_face_recognition_real.py # Extended tests
+python tests/test_facial_recognition.py    # Component tests
+python tests/test_face_recognition_real.py # Extended tests
 ```
 
 ---

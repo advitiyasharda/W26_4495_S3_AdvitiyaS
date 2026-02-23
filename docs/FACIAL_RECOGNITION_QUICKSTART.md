@@ -153,10 +153,10 @@ For each new face:
 
 ```
 doortest/
-├── capture_faces.py              # ← Capture photos
-├── register_faces.py             # ← Register photos
-├── quick_test_recognition.py     # ← Test accuracy
-├── diagnose_recognition.py       # ← Diagnose issues
+├── scripts/capture_faces.py      # ← Capture photos
+├── scripts/register_faces.py     # ← Register photos
+├── scripts/quick_test_recognition.py  # ← Test accuracy
+├── scripts/diagnose_recognition.py    # ← Diagnose issues
 ├── api/
 │   └── facial_recognition.py    # Core engine
 ├── data/
@@ -189,7 +189,7 @@ python scripts/quick_test_recognition.py
 GET RESULTS
 ✓ Recognition working? → DONE!
 ⚠ Low accuracy? → See troubleshooting
-✗ Errors? → Run diagnose_recognition.py
+✗ Errors? → Run python scripts/diagnose_recognition.py
 ```
 
 ---
@@ -293,7 +293,7 @@ sqlite3 data/doorface.db
 
 For issues:
 1. Check troubleshooting section
-2. Run `diagnose_recognition.py`
+2. Run `python scripts/diagnose_recognition.py`
 3. Review `docs/FACIAL_RECOGNITION_GUIDE.md`
 
 ---
@@ -301,11 +301,11 @@ For issues:
 ## Summary
 
 You now have:
-✅ Face capture utility (capture_faces.py)
-✅ Face registration system (register_faces.py)
+✅ Face capture utility (scripts/capture_faces.py)
+✅ Face registration system (scripts/register_faces.py)
 ✅ Real face recognition algorithm (HOG + distance matching)
-✅ Testing scripts (quick_test_recognition.py)
-✅ Diagnostics tool (diagnose_recognition.py)
+✅ Testing scripts (scripts/quick_test_recognition.py)
+✅ Diagnostics tool (scripts/diagnose_recognition.py)
 ✅ Complete documentation (FACIAL_RECOGNITION_GUIDE.md)
 
 **Start with**: `python scripts/capture_faces.py`

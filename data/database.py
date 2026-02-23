@@ -182,6 +182,25 @@ class Database:
         except Exception as e:
             logger.error(f"Error adding user: {e}")
             return False
+
+    def get_user_by_name(self, name: str) -> Optional[Dict]:
+        """Get a single user row by exact name, or None if not found."""
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(
+                '''
+                SELECT user_id, name, display_id, role
+                FROM users
+                WHERE name = ?
+                LIMIT 1
+                ''',
+                (name,),
+            )
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        except Exception as e:
+            logger.error(f"Error getting user by name: {e}")
+            return None
     
     def log_access(self, user_id: str, access_type: str, 
                    confidence: float = 0.0, status: str = 'success',

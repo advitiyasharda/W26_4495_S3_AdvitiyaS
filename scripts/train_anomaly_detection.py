@@ -1,7 +1,16 @@
 """
 Anomaly Detection Training Script
-Train and test the Isolation Forest model with synthetic data
+Train and test the Isolation Forest model with synthetic data.
+
+Run from project root:
+  python3 scripts/train_anomaly_detection.py
 """
+import sys
+from pathlib import Path
+
+# Ensure project root is on sys.path so 'models' and 'data' imports work
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import numpy as np
 import pandas as pd
 from datetime import datetime

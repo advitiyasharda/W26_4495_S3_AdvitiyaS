@@ -272,12 +272,12 @@ Distance ≥ 0.7  → Different person ✗
 
 ## Success Checklist
 
-- [ ] capture_faces.py runs without errors
+- [ ] scripts/capture_faces.py runs without errors
 - [ ] You can capture 10+ face photos
-- [ ] register_faces.py extracts encodings successfully
-- [ ] quick_test_recognition.py shows >70% accuracy
-- [ ] diagnose_recognition.py passes all checks
-- [ ] test_integration.py passes all tests
+- [ ] scripts/register_faces.py extracts encodings successfully
+- [ ] scripts/quick_test_recognition.py shows >70% accuracy
+- [ ] scripts/diagnose_recognition.py passes all checks
+- [ ] tests/test_integration.py passes all tests
 - [ ] Webcam recognition shows your name
 
 Once ALL items are checked:
@@ -309,11 +309,11 @@ Checks everything and provides specific solutions.
 
 | File | Purpose | Run When |
 |------|---------|----------|
-| capture_faces.py | Capture photos | First time / need more photos |
-| register_faces.py | Register photos | After capturing new photos |
-| quick_test_recognition.py | Test accuracy | After registering / troubleshooting |
-| diagnose_recognition.py | Debug issues | Something doesn't work |
-| test_integration.py | Full system test | Before deployment |
+| scripts/capture_faces.py | Capture photos | First time / need more photos |
+| scripts/register_faces.py | Register photos | After capturing new photos |
+| scripts/quick_test_recognition.py | Test accuracy | After registering / troubleshooting |
+| scripts/diagnose_recognition.py | Debug issues | Something doesn't work |
+| tests/test_integration.py | Full system test | Before deployment |
 
 ---
 

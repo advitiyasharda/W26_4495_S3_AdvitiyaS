@@ -149,7 +149,7 @@ def test_recognition_with_photos():
     
     if not sample_dir.exists():
         print("No sample photos found")
-        print("Run: python capture_faces.py")
+        print("Run: python scripts/capture_faces.py")
         return
     
     # Load registered people

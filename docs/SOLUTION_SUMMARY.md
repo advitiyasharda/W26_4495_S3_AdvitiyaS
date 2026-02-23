@@ -12,7 +12,7 @@ User captured face photos but the system wasn't recognizing them:
    - Always returned low confidence
    - Didn't compare against registered faces
 
-2. **register_faces.py** was storing dummy random encodings
+2. **scripts/register_faces.py** was storing dummy random encodings
    - Not extracting real features from photos
    - Made all faces look randomly different
 
@@ -96,7 +96,7 @@ def recognize_face(self, frame, face_location):
 
 ### Phase 2: Registration System Update
 
-**File: `register_faces.py`**
+**File: `scripts/register_faces.py`**
 
 Updated `register_from_photos()` to extract real encodings:
 
@@ -124,16 +124,16 @@ for photo in photos:
 
 Created comprehensive testing scripts:
 
-**File: `quick_test_recognition.py`**
+**File: `scripts/quick_test_recognition.py`**
 - Tests accuracy on stored photos
 - Live webcam recognition testing
 - Shows statistics and results
 
-**File: `diagnose_recognition.py`**
+**File: `scripts/diagnose_recognition.py`**
 - Diagnostic checks for: camera, face detection, samples, recognition, database
 - Helps identify issues quickly
 
-**File: `test_face_recognition_real.py`**
+**File: `tests/test_face_recognition_real.py`**
 - Extended testing with detailed output
 - Component-level testing
 
@@ -145,14 +145,14 @@ Created comprehensive testing scripts:
    - Fixed `recognize_face()` with actual matching algorithm
    - ~50 lines changed
 
-2. **register_faces.py**
+2. **scripts/register_faces.py**
    - Updated `register_from_photos()` to extract real encodings
    - ~20 lines changed
 
 ### New Files Created
-1. **quick_test_recognition.py** - Main testing script (200+ lines)
-2. **diagnose_recognition.py** - Diagnostic tool (400+ lines)
-3. **test_face_recognition_real.py** - Extended tests (350+ lines)
+1. **scripts/quick_test_recognition.py** - Main testing script (200+ lines)
+2. **scripts/diagnose_recognition.py** - Diagnostic tool (400+ lines)
+3. **tests/test_face_recognition_real.py** - Extended tests (350+ lines)
 4. **FACIAL_RECOGNITION_QUICKSTART.md** - Quick reference guide
 5. **docs/FACIAL_RECOGNITION_GUIDE.md** - Complete documentation
 
@@ -295,15 +295,15 @@ Root cause: Fixed - now uses real face encoding + distance matching
 
 ## Testing Checklist
 
-- [x] Face capture works (capture_faces.py)
-- [x] Face registration works (register_faces.py)
+- [x] Face capture works (scripts/capture_faces.py)
+- [x] Face registration works (scripts/register_faces.py)
 - [x] HOG feature extraction works (_extract_face_features)
 - [x] Face matching works (recognize_face)
 - [x] Confidence scoring works
-- [x] Photo-based testing works (quick_test_recognition.py)
-- [x] Webcam-based testing works (quick_test_recognition.py)
-- [x] Diagnostics work (diagnose_recognition.py)
-- [x] Integration test works (test_integration.py)
+- [x] Photo-based testing works (scripts/quick_test_recognition.py)
+- [x] Webcam-based testing works (scripts/quick_test_recognition.py)
+- [x] Diagnostics work (scripts/diagnose_recognition.py)
+- [x] Integration test works (tests/test_integration.py)
 - [x] API endpoints ready (api/main.py)
 
 ## Team Next Steps

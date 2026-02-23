@@ -172,7 +172,20 @@ class FacialRecognitionEngine:
         except Exception as e:
             logger.error(f"Error registering face: {e}")
             return False
-    
+
+    def remove_face(self, person_id: str) -> bool:
+        """Remove a person from the recognition engine (they will no longer be recognized)."""
+        try:
+            if person_id in self.known_faces:
+                del self.known_faces[person_id]
+            if person_id in self.person_names:
+                del self.person_names[person_id]
+            logger.info(f"Face removed for person_id: {person_id}")
+            return True
+        except Exception as e:
+            logger.error(f"Error removing face: {e}")
+            return False
+
     def _extract_face_features(self, face_roi: np.ndarray) -> Optional[np.ndarray]:
         """
         Extract feature vector from face image.

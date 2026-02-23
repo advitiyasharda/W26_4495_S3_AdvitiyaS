@@ -45,6 +45,7 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [usingDemo, setUsingDemo] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
+  const [mounted, setMounted] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -74,6 +75,9 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+  useEffect(() => {
     refresh();
     const id = setInterval(refresh, 30_000);
     return () => clearInterval(id);
@@ -88,7 +92,9 @@ export default function DashboardPage() {
         <div>
           <h1 className="text-2xl font-bold text-slate-800">Dashboard</h1>
           <div className="flex items-center gap-2 mt-0.5">
-            <p className="text-sm text-slate-400">Last updated {lastRefresh.toLocaleTimeString()}</p>
+            <p className="text-sm text-slate-400" suppressHydrationWarning>
+              Last updated {mounted ? lastRefresh.toLocaleTimeString() : "—"}
+            </p>
             {usingDemo && (
               <span className="bg-amber-50 text-amber-600 text-xs font-medium px-2.5 py-0.5 rounded-full border border-amber-200">
                 Demo data

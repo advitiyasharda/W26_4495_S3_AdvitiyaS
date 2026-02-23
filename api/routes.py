@@ -1,40 +1,47 @@
 """
 Flask API Routes for Door Face Panels Smart Security System
 """
-from flask import Blueprint, request, jsonify, current_app
-from datetime import datetime
+import base64
 import logging
+from datetime import datetime
+
+import cv2
+import numpy as np
+from flask import Blueprint, request, jsonify, current_app
 
 logger = logging.getLogger(__name__)
 
-api_bp = Blueprint('api', __name__)
+api_bp = Blueprint("api", __name__)
+
 
 def get_db():
     """Get database instance from Flask app"""
     return current_app.db
 
-@api_bp.route('/health', methods=['GET'])
+
+@api_bp.route("/health", methods=["GET"])
 def health_check():
     """Health check endpoint"""
     return jsonify({
-        'status': 'healthy',
-        'timestamp': datetime.now().isoformat(),
-        'version': '0.1.0'
+        "status": "healthy",
+        "timestamp": datetime.now().isoformat(),
+        "version": "0.1.0",
     }), 200
 
-@api_bp.route('/recognize', methods=['POST'])
+
+@api_bp.route("/recognize", methods=["POST"])
 def recognize_face():
     """
     Recognize a face from camera frame.
-    
+
     Expected JSON:
     {
-        "frame": "base64_encoded_image"
+        "frame": "base64_encoded_image"  (optional: "data:image/jpeg;base64,...")
     }
-    
+
     Returns:
     {
-        "person_id": "string",
+        "person_id": "string" | null,
         "name": "string",
         "confidence": 0.0-1.0,
         "access_granted": bool,
@@ -43,25 +50,79 @@ def recognize_face():
     """
     try:
         data = request.get_json()
-        
-        if not data or 'frame' not in data:
-            return jsonify({'error': 'Missing frame data'}), 400
-        
-        # TODO: Implement face recognition
+        if not data or "frame" not in data:
+            return jsonify({"error": "Missing frame data"}), 400
+
+        raw = data["frame"].strip()
+        if raw.startswith("data:"):
+            raw = raw.split(",", 1)[-1]
+        try:
+            img_bytes = base64.b64decode(raw)
+        except Exception as e:
+            return jsonify({"error": f"Invalid base64: {e}"}), 400
+
+        arr = np.frombuffer(img_bytes, dtype=np.uint8)
+        frame = cv2.imdecode(arr, cv2.IMREAD_COLOR)
+        if frame is None:
+            return jsonify({"error": "Could not decode image"}), 400
+
+        engine = current_app.face_engine
+        faces = engine.detect_faces(frame)
+        if len(faces) == 0:
+            return jsonify({
+                "person_id": None,
+                "name": "Unknown",
+                "confidence": 0.0,
+                "access_granted": False,
+                "timestamp": str(datetime.now().isoformat()),
+            }), 200
+
+        x, y, w, h = (int(v) for v in faces[0])
+        rec = engine.recognize_face(frame, (x, y, w, h))
+        conf = rec.get("confidence", 0.0)
+        access_granted = (
+            rec.get("person_id") is not None
+            and float(conf) >= engine.confidence_threshold
+        )
+        # Coerce to native Python types for JSON (avoid numpy float/int)
         result = {
-            'person_id': 'person_001',
-            'name': 'John Doe',
-            'confidence': 0.92,
-            'access_granted': True,
-            'timestamp': datetime.now().isoformat()
+            "person_id": rec.get("person_id"),
+            "name": str(rec.get("name", "Unknown")),
+            "confidence": float(conf),
+            "access_granted": bool(access_granted),
+            "timestamp": str(rec.get("timestamp", datetime.now().isoformat())),
         }
-        
-        logger.info(f"Face recognized: {result['name']}")
+        logger.info("Face recognized: %s (confidence: %.2f)", result["name"], result["confidence"])
+        db = get_db()
+        if access_granted and result["person_id"]:
+            db.add_user(result["person_id"], result["name"], "resident")  # ensure user exists
+            db.log_access(
+                result["person_id"],
+                "entry",
+                confidence=float(conf),
+                status="success",
+            )
+            db.log_audit(
+                "ACCESS_GRANTED",
+                user_id=result["person_id"],
+                resource="door/main-entrance",
+                result="success",
+                details=f"confidence={conf:.2f}",
+            )
+        else:
+            # Face detected but not recognized or below threshold
+            db.log_audit(
+                "ACCESS_DENIED",
+                user_id=result["name"] or "Unknown",
+                resource="door/main-entrance",
+                result="failed",
+                details=f"confidence={conf:.2f}",
+            )
         return jsonify(result), 200
-        
+
     except Exception as e:
-        logger.error(f"Error in face recognition: {str(e)}")
-        return jsonify({'error': str(e)}), 500
+        logger.exception("Error in face recognition")
+        return jsonify({"error": str(e)}), 500
 
 @api_bp.route('/log-access', methods=['POST'])
 def log_access():
@@ -201,13 +262,16 @@ def get_audit_log():
         limit = request.args.get('limit', 100, type=int)
         offset = request.args.get('offset', 0, type=int)
         
-        # Query audit log database
-        audit_log = get_db().get_audit_logs(limit=limit, offset=offset)
-        
+        # Query audit log database; map user_id -> user for frontend
+        raw = get_db().get_audit_logs(limit=limit, offset=offset)
+        audit_log = [
+            {**row, "user": row.get("user_id")}
+            for row in raw
+        ]
         return jsonify({
-            'audit_log': audit_log,
-            'count': len(audit_log),
-            'timestamp': datetime.now().isoformat()
+            "audit_log": audit_log,
+            "count": len(audit_log),
+            "timestamp": datetime.now().isoformat(),
         }), 200
         
     except Exception as e:

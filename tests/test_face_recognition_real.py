@@ -1,6 +1,13 @@
 """
 Test Face Recognition with Real Detection and Matching
+
+Run from project root: python tests/test_face_recognition_real.py
 """
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import cv2
 from pathlib import Path
 from api.facial_recognition import FacialRecognitionEngine

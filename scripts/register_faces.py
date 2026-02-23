@@ -61,7 +61,7 @@ class FaceRegistration:
         # Check if photos exist
         if not Path(photo_dir).exists():
             print(f"✗ No photos found at: {photo_dir}")
-            print(f"  Run: python capture_faces.py")
+            print(f"  Run: python scripts/capture_faces.py")
             return False
         
         # Count photos

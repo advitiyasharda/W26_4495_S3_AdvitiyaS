@@ -1,8 +1,14 @@
 """
 Integration Test - Full System Testing
 Test all modules together: facial recognition, anomaly detection, threat detection
+
+Run from project root: python tests/test_integration.py
 """
 import logging
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from datetime import datetime, timedelta
 from api.facial_recognition import FacialRecognitionEngine
 from api.threat_detection import ThreatDetector

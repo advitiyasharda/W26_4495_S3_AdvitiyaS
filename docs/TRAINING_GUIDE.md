@@ -4,9 +4,9 @@
 
 Three test scripts to train and validate the system:
 
-1. **test_facial_recognition.py** - Face detection with webcam
-2. **train_anomaly_detection.py** - Train ML models with synthetic data
-3. **test_integration.py** - Full system integration test
+1. **tests/test_facial_recognition.py** - Face detection with webcam
+2. **scripts/train_anomaly_detection.py** - Train ML models with synthetic data
+3. **tests/test_integration.py** - Full system integration test
 
 ---
 
@@ -16,7 +16,7 @@ Three test scripts to train and validate the system:
 
 ```bash
 # Run complete end-to-end test
-python test_integration.py
+python tests/test_integration.py
 
 # Select option "1" for complete flow test
 # This simulates:
@@ -38,7 +38,7 @@ Perfect for training with synthetic data (no hardware needed)
 
 ```bash
 # 1. Run full training pipeline
-python train_anomaly_detection.py
+python scripts/train_anomaly_detection.py
 
 # Select "1" for complete pipeline:
 #   ├─ Generate 30 days of synthetic data (3 residents)
@@ -71,7 +71,7 @@ Test face detection in real-time (requires webcam)
 
 ```bash
 # 1. Run facial recognition test
-python test_facial_recognition.py
+python tests/test_facial_recognition.py
 
 # Select "1" for webcam test:
 #   - Opens webcam feed
@@ -98,7 +98,7 @@ Test data persistence and logging
 
 ```bash
 # 2. Run database test
-python test_facial_recognition.py
+python tests/test_facial_recognition.py
 
 # Select "2" for database integration test:
 #   - Creates test users
@@ -114,12 +114,12 @@ python test_facial_recognition.py
 ### Generate Different Datasets
 
 ```bash
-python train_anomaly_detection.py
+python scripts/train_anomaly_detection.py
 
 # Option 1: Full pipeline (default)
 # Option 2: Generate data only
 python -c "
-from train_anomaly_detection import AnomalyTrainer
+from scripts.train_anomaly_detection import AnomalyTrainer
 trainer = AnomalyTrainer()
 # 90 days, 5 residents
 trainer.generate_training_data(num_days=90, num_residents=5)
@@ -127,7 +127,7 @@ trainer.generate_training_data(num_days=90, num_residents=5)
 
 # Option 3: Train on existing data
 python -c "
-from train_anomaly_detection import AnomalyTrainer
+from scripts.train_anomaly_detection import AnomalyTrainer
 trainer = AnomalyTrainer()
 trainer.train_model('data/synthetic_dataset.csv')
 "
@@ -297,8 +297,8 @@ python -c "from data import Database; db = Database()"
 
 ## Next Steps
 
-1. **Complete Integration Test** → `python test_integration.py`
-2. **Train Full Model** → `python train_anomaly_detection.py`
+1. **Complete Integration Test** → `python tests/test_integration.py`
+2. **Train Full Model** → `python scripts/train_anomaly_detection.py`
 3. **Test on Real Data** → Add images to `data/samples/`
 4. **Deploy to Raspberry Pi** → See `docs/DEPLOYMENT.md`
 5. **Integrate with Flask API** → Already pre-configured in `api/routes.py`
@@ -309,9 +309,9 @@ python -c "from data import Database; db = Database()"
 
 ```
 doortest/
-├── test_facial_recognition.py  # Webcam + database tests
-├── train_anomaly_detection.py  # ML training pipeline
-├── test_integration.py         # Full system test
+├── tests/test_facial_recognition.py  # Webcam + database tests
+├── scripts/train_anomaly_detection.py  # ML training pipeline
+├── tests/test_integration.py         # Full system test
 ├── data/
 │   ├── synthetic_dataset.csv   # Generated training data
 │   └── doorface.db             # SQLite database
@@ -323,4 +323,4 @@ doortest/
 
 ---
 
-**Start Here**: `python test_integration.py` (select option 1)
+**Start Here**: `python tests/test_integration.py` (select option 1)

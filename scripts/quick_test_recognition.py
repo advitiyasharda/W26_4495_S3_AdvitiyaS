@@ -3,9 +3,9 @@
 Quick test to verify facial recognition pipeline works end-to-end
 Tests: capture → register → recognize
 
-Usage:
-  python quick_test_recognition.py           # test all people in data/samples/
-  python quick_test_recognition.py Eric      # test only the person in data/samples/Eric/
+Usage (from project root):
+  python scripts/quick_test_recognition.py           # test all people in data/samples/
+  python scripts/quick_test_recognition.py Eric      # test only the person in data/samples/Eric/
 """
 import argparse
 import cv2
@@ -13,8 +13,8 @@ import numpy as np
 from pathlib import Path
 import sys
 
-# Add project to path
-sys.path.insert(0, str(Path(__file__).parent))
+# Add project root to path (run from project root: python scripts/quick_test_recognition.py)
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from api.facial_recognition import FacialRecognitionEngine
 from data.database import Database
@@ -32,7 +32,7 @@ def test_pipeline(person_name_filter=None):
     print("\n[STEP 1] Checking for captured photos...")
     if not sample_dir.exists():
         print("  ✗ No sample photos found!")
-        print("  Please run: python capture_faces.py")
+        print("  Please run: python scripts/capture_faces.py")
         return False
     
     person_dirs = [d for d in sample_dir.iterdir() if d.is_dir()]

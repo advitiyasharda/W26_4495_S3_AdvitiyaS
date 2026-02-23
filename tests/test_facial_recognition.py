@@ -1,7 +1,14 @@
 """
 Facial Recognition Training and Testing Script
 Test the facial recognition module with sample data
+
+Run from project root: python tests/test_facial_recognition.py
 """
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import cv2
 import numpy as np
 import os

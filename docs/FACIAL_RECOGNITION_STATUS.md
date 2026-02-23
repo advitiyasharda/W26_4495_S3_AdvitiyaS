@@ -27,14 +27,14 @@ Your facial recognition system is **fully functional** and tested. Here's what y
 
 ```bash
 # Step 1: Capture your face (press SPACE 10-15 times)
-python capture_faces.py
+python scripts/capture_faces.py
 
 # Step 2: Register the photos
-python register_faces.py
+python scripts/register_faces.py
 # Choose: Option 2 "Register from captured photos"
 
 # Step 3: Test accuracy
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 # Expected: >80% accuracy ✓
 ```
 
@@ -177,7 +177,7 @@ Scalability:
 
 ### Quick Test (1 minute)
 ```bash
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 ```
 Checks if everything is working. Shows pass/fail for:
 - Camera availability
@@ -188,21 +188,21 @@ Checks if everything is working. Shows pass/fail for:
 
 ### Accuracy Test (2 minutes)
 ```bash
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 # Select: 1 for photo test
 # Expected: >80% accuracy
 ```
 
 ### Live Webcam Test (3 minutes)
 ```bash
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 # Select: 1, then Y for webcam
 # You should see your name displayed!
 ```
 
 ### Full System Test (5 minutes)
 ```bash
-python test_integration.py
+python tests/test_integration.py
 # Tests API, database, all components
 ```
 
@@ -210,7 +210,7 @@ python test_integration.py
 
 ## ✅ Verification Checklist
 
-- [ ] Run `python quick_test_recognition.py`
+- [ ] Run `python scripts/quick_test_recognition.py`
 - [ ] Get >80% accuracy on your photos
 - [ ] See your name in webcam feed
 - [ ] All diagnostics pass
@@ -225,7 +225,7 @@ Once all checked: ✅ **YOU'RE DONE!**
 
 ### Capture Phase (5 min)
 ```bash
-python capture_faces.py
+python scripts/capture_faces.py
 # Face camera and press SPACE 10-15 times
 # Vary angles and lighting
 # Press Q when done
@@ -233,7 +233,7 @@ python capture_faces.py
 
 ### Register Phase (2 min)
 ```bash
-python register_faces.py
+python scripts/register_faces.py
 # Select: Option 2
 # Select: Your name
 # Wait for feature extraction
@@ -243,7 +243,7 @@ python register_faces.py
 ### Use Phase (Ongoing)
 ```bash
 # Test accuracy
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 
 # Integrate with API
 python main.py
@@ -262,9 +262,9 @@ python main.py
 **Fix**: Recapture with better lighting and angles
 ```bash
 rm -rf data/samples/
-python capture_faces.py  # Better photos this time
-python register_faces.py
-python quick_test_recognition.py
+python scripts/capture_faces.py  # Better photos this time
+python scripts/register_faces.py
+python scripts/quick_test_recognition.py
 ```
 
 ### Symptom: "No faces detected"
@@ -284,7 +284,7 @@ python quick_test_recognition.py
 ### Symptom: Can't tell what's wrong
 **Fix**: Run diagnostics
 ```bash
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 # Shows exactly what's not working + solutions
 ```
 
@@ -342,14 +342,14 @@ python diagnose_recognition.py
 
 ```bash
 # Test and verify
-python diagnose_recognition.py       # Full diagnostic
-python quick_test_recognition.py     # Test accuracy & webcam
-python test_integration.py           # Full system test
+python scripts/diagnose_recognition.py       # Full diagnostic
+python scripts/quick_test_recognition.py     # Test accuracy & webcam
+python tests/test_integration.py           # Full system test
 
 # Manage photos
-python capture_faces.py              # Capture new photos
-python register_faces.py             # Register photos
-python register_faces.py             # View stats (option 4)
+python scripts/capture_faces.py              # Capture new photos
+python scripts/register_faces.py             # Register photos
+python scripts/register_faces.py             # View stats (option 4)
 
 # Start API server
 python main.py                       # Runs on localhost:5000
@@ -371,9 +371,9 @@ python test_face_recognition_real.py # Extended tests
 ✅ Well documented (6 comprehensive guides)
 ✅ Ready to integrate (API endpoints prepared)
 
-**Start here**: `python capture_faces.py`
+**Start here**: `python scripts/capture_faces.py`
 
-**Report issues**: Run `python diagnose_recognition.py`
+**Report issues**: Run `python scripts/diagnose_recognition.py`
 
 **Get help**: Read `docs/FACIAL_RECOGNITION_GUIDE.md`
 
@@ -403,7 +403,7 @@ A: Integrate with dashboard and API.
 
 ## 📞 Support
 
-1. **Quick check**: Run `python diagnose_recognition.py`
+1. **Quick check**: Run `python scripts/diagnose_recognition.py`
 2. **Common issues**: Check `FACIAL_RECOGNITION_QUICKSTART.md`
 3. **Detailed help**: Read `docs/FACIAL_RECOGNITION_GUIDE.md`
 4. **Technical questions**: See `docs/ARCHITECTURE.md`
@@ -414,7 +414,7 @@ A: Integrate with dashboard and API.
 
 Start testing now with:
 ```bash
-python capture_faces.py
+python scripts/capture_faces.py
 ```
 
 ---

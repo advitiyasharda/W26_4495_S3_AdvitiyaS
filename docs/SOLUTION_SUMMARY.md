@@ -161,21 +161,21 @@ Created comprehensive testing scripts:
 ### For Immediate Testing
 ```bash
 # 1. Capture your face (10-15 photos with varied angles/lighting)
-python capture_faces.py
+python scripts/capture_faces.py
 
 # 2. Register the captured photos
-python register_faces.py
+python scripts/register_faces.py
 # Choose: Option 2 "Register from captured photos"
 
 # 3. Test recognition accuracy
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 # Expected: >80% accuracy means working well!
 ```
 
 ### For Troubleshooting
 ```bash
 # Run diagnostics to identify issues
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 
 # This will check:
 # ✓ Camera is available
@@ -239,20 +239,20 @@ Root cause: Fixed - now uses real face encoding + distance matching
 
 1. **Algorithm is working**
    ```bash
-   python quick_test_recognition.py
+   python scripts/quick_test_recognition.py
    # Should show >70% accuracy on stored photos
    ```
 
 2. **Real-time works**
    ```bash
-   python quick_test_recognition.py
+   python scripts/quick_test_recognition.py
    # Choose option 1 (webcam test)
    # You should see your name when facing camera
    ```
 
 3. **No regression**
    ```bash
-   python test_integration.py
+   python tests/test_integration.py
    # All other components still working
    ```
 
@@ -346,9 +346,9 @@ The facial recognition system now **actually works**. It captures your face, reg
 
 **Start testing now with:**
 ```bash
-python capture_faces.py
-python register_faces.py
-python quick_test_recognition.py
+python scripts/capture_faces.py
+python scripts/register_faces.py
+python scripts/quick_test_recognition.py
 ```
 
 ---

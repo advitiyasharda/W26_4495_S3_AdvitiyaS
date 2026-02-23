@@ -58,7 +58,7 @@ def test_recognition_with_webcam():
     # Test with webcam
     print("\n" + "=" * 70)
     print("Opening webcam for recognition test...")
-    print("Press Q to exit")
+    print("Press Q or ESC to exit (click the video window first if key doesn't work)")
     print("=" * 70 + "\n")
     
     cap = cv2.VideoCapture(0)
@@ -106,11 +106,16 @@ def test_recognition_with_webcam():
         # Show registered people
         cv2.putText(frame, f'Registered: {len(engine.known_faces)}',
                    (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        # Quit hint (click window first so key is detected)
+        h, w = frame.shape[:2]
+        cv2.putText(frame, 'Q or ESC to quit (click window first)', (10, h - 15),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
         
         cv2.imshow('Face Recognition Test', frame)
         
+        # Q or q or ESC to quit (window must be focused for key press to register)
         key = cv2.waitKey(1) & 0xFF
-        if key == ord('q'):
+        if key in (ord('q'), ord('Q'), 27):  # 27 = ESC
             break
     
     cap.release()

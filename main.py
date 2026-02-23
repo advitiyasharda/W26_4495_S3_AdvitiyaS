@@ -32,7 +32,8 @@ def main():
     logger.info("Frontend (Next.js) should run separately on http://localhost:3000")
     logger.info("=" * 60)
 
-    app.run(host=host, port=port, debug=debug)
+    # Single-threaded to avoid OpenCV/native code segfaults when frontend hits multiple endpoints at once
+    app.run(host=host, port=port, debug=debug, threaded=False)
 
 if __name__ == '__main__':
     main()

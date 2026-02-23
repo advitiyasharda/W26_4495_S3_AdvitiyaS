@@ -97,7 +97,7 @@ export default function Sidebar() {
         </div>
         {!collapsed && (
           <span className="font-bold text-slate-800 text-base leading-tight">
-            FaceDoor
+            Door Face Panels
           </span>
         )}
       </div>

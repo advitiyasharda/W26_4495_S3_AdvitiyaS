@@ -2,7 +2,12 @@
 """
 Quick test to verify facial recognition pipeline works end-to-end
 Tests: capture → register → recognize
+
+Usage:
+  python quick_test_recognition.py           # test all people in data/samples/
+  python quick_test_recognition.py Eric      # test only the person in data/samples/Eric/
 """
+import argparse
 import cv2
 import numpy as np
 from pathlib import Path
@@ -14,7 +19,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from api.facial_recognition import FacialRecognitionEngine
 from data.database import Database
 
-def test_pipeline():
+def test_pipeline(person_name_filter=None):
     """Test the complete recognition pipeline"""
     print("\n" + "="*70)
     print("FACIAL RECOGNITION PIPELINE TEST")
@@ -31,7 +36,17 @@ def test_pipeline():
         return False
     
     person_dirs = [d for d in sample_dir.iterdir() if d.is_dir()]
-    print(f"  ✓ Found {len(person_dirs)} people with captured photos")
+    
+    if person_name_filter is not None:
+        person_dirs = [d for d in person_dirs if d.name == person_name_filter]
+        if not person_dirs:
+            available = [d.name for d in sample_dir.iterdir() if d.is_dir()]
+            print(f"  ✗ No folder found for '{person_name_filter}' in data/samples/")
+            print(f"     Available: {available}")
+            return False
+        print(f"  ✓ Testing only: {person_name_filter}")
+    else:
+        print(f"  ✓ Found {len(person_dirs)} people with captured photos")
     
     # Step 2: Register faces from photos
     print("\n[STEP 2] Loading and registering faces...")
@@ -260,8 +275,13 @@ def test_webcam_recognition():
     print(f"\n✓ Test complete! Captured {len(captured_faces)} frames")
 
 if __name__ == '__main__':
+    parser = argparse.ArgumentParser(description='Test facial recognition pipeline')
+    parser.add_argument('person', nargs='?', default=None,
+                        help='Only test this person (folder name in data/samples/, e.g. Eric)')
+    args = parser.parse_args()
+    
     # First test stored photos
-    success = test_pipeline()
+    success = test_pipeline(person_name_filter=args.person)
     
     if success:
         print("\n" + "="*70)

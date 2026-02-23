@@ -170,7 +170,12 @@ def register_captured_person(person_name):
         db = Database()
         engine = FacialRecognitionEngine()
         
-        db.add_user(person_id, person_name.replace('_', ' ').title(), role)
+        if not db.add_user(person_id, person_name.replace('_', ' ').title(), role):
+            print(f"  ✗ Could not add to database (database may be locked).")
+            print(f"     Stop the Flask server (Ctrl+C in its terminal) and run:")
+            print(f"     python register_faces.py  → option 2 to register from photos")
+            return
+        
         print(f"  ✓ Added to database")
         
         # Register face (dummy encoding for now)

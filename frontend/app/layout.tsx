@@ -3,7 +3,7 @@ import "./globals.css";
 import Sidebar from "@/components/Sidebar";
 
 export const metadata: Metadata = {
-  title: "FaceDoor — Caregiver Dashboard",
+  title: "Door Face Panels — Caregiver Dashboard",
   description: "Smart door security and anomaly detection system for elderly care",
 };
 

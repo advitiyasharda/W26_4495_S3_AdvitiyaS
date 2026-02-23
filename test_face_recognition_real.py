@@ -18,7 +18,7 @@ def test_recognition_with_webcam():
     # Load registered faces from database
     print("\nLoading registered people...")
     users = db.get_database_stats()
-    print(f"  Registered persons: {users['total_persons']}")
+    print(f"  Users in database: {users.get('total_users', 0)}")
     
     # Load face encodings from registered people
     # In a real system, we'd query the database

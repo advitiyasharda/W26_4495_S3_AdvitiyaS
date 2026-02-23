@@ -29,7 +29,11 @@ class FaceRegistration:
         """
         try:
             # Add to database
-            self.db.add_user(person_id, name, role)
+            if not self.db.add_user(person_id, name, role):
+                print(f"  ✗ Could not add to database (database may be locked).")
+                print(f"     Stop the Flask server and try again.")
+                return False
+            
             print(f"  ✓ Added to database: {person_id}")
             
             # Register in facial recognition engine
@@ -108,7 +112,11 @@ class FaceRegistration:
         
         # Register person with extracted encodings
         try:
-            self.db.add_user(person_id, person_name.replace('_', ' ').title(), role)
+            if not self.db.add_user(person_id, person_name.replace('_', ' ').title(), role):
+                print(f"  ✗ Could not add to database (database may be locked).")
+                print(f"     Stop the Flask server and try again.")
+                return False
+            
             print(f"  ✓ Added to database")
             
             # Register all encodings

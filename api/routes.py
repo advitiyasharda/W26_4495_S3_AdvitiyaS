@@ -118,6 +118,15 @@ def recognize_face():
                 result="failed",
                 details=f"confidence={conf:.2f}",
             )
+            db.log_threat(
+                threat_type="Unrecognised Face Detected",
+                severity="HIGH",
+                user_id=result["name"] or "Unknown",
+                message=(
+                    f"Face detected at main entrance but no match in database. "
+                    f"Confidence: {float(conf):.2f}."
+                ),
+            )
         return jsonify(result), 200
 
     except Exception as e:
@@ -172,9 +181,9 @@ def get_threats():
         # Query database for threats
         threats = get_db().get_active_threats(severity=severity)
         
-        # Filter by person_id if provided
+        # Filter by person_id (user_id in DB) if provided
         if person_id:
-            threats = [t for t in threats if t.get('person_id') == person_id]
+            threats = [t for t in threats if t.get("user_id") == person_id]
         
         return jsonify({
             'threats': threats,

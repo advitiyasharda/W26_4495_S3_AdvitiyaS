@@ -5,7 +5,7 @@ Handles access logs, threats, audit trails, and user data
 import sqlite3
 import json
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import List, Dict, Optional
 
@@ -184,14 +184,17 @@ class Database:
             return False
     
     def log_access(self, user_id: str, access_type: str, 
-                   confidence: float = 0.0, status: str = 'success') -> bool:
-        """Log an access event"""
+                   confidence: float = 0.0, status: str = 'success',
+                   timestamp: str = None) -> bool:
+        """Log an access event. Stores UTC so frontend can display in local time."""
         try:
+            if timestamp is None:
+                timestamp = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%S") + "Z"
             cursor = self.conn.cursor()
             cursor.execute('''
-                INSERT INTO access_logs (user_id, access_type, confidence, status)
-                VALUES (?, ?, ?, ?)
-            ''', (user_id, access_type, confidence, status))
+                INSERT INTO access_logs (user_id, access_type, confidence, status, timestamp)
+                VALUES (?, ?, ?, ?, ?)
+            ''', (user_id, access_type, confidence, status, timestamp))
             self.conn.commit()
             logger.info(f"Access logged: {user_id} - {access_type}")
             return True
@@ -201,6 +204,8 @@ class Database:
     
     # Demo/seed user IDs to exclude from access logs so dashboard shows only real recognition data
     DEMO_USER_IDS = frozenset({'caregiver_001', 'resident_001'})
+    # Placeholder for failed recognition; exclude from "registered people" list
+    UNKNOWN_USER_ID = "Unknown"
 
     def get_access_logs(self, user_id: str = None,
                        limit: int = 100, offset: int = 0) -> List[Dict]:
@@ -349,6 +354,44 @@ class Database:
             logger.error(f"Error saving behavioral profile: {e}")
             return False
     
+    def get_users(self) -> List[Dict]:
+        """Get all registered users (for display in UI). Excludes demo IDs and Unknown placeholder."""
+        try:
+            cursor = self.conn.cursor()
+            exclude = self.DEMO_USER_IDS | {self.UNKNOWN_USER_ID}
+            placeholders = ",".join("?" * len(exclude))
+            cursor.execute(f'''
+                SELECT user_id, name, COALESCE(NULLIF(TRIM(display_id), ''), user_id) AS display_id, role
+                FROM users
+                WHERE user_id NOT IN ({placeholders})
+                ORDER BY name
+            ''', tuple(exclude))
+            return [dict(row) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error getting users: {e}")
+            return []
+
+    def delete_user(self, user_id: str) -> bool:
+        """Remove a user and their related records. Returns True if deleted."""
+        if user_id in self.DEMO_USER_IDS or user_id == self.UNKNOWN_USER_ID:
+            return False
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute("DELETE FROM access_logs WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM anomalies WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM behavioral_profiles WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM threats WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM audit_logs WHERE user_id = ?", (user_id,))
+            cursor.execute("DELETE FROM users WHERE user_id = ?", (user_id,))
+            self.conn.commit()
+            if cursor.rowcount > 0:
+                logger.info(f"User deleted: {user_id}")
+                return True
+            return False
+        except Exception as e:
+            logger.error(f"Error deleting user: {e}")
+            return False
+
     def get_database_stats(self) -> Dict:
         """Get database statistics"""
         try:

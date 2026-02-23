@@ -65,9 +65,35 @@ export interface AuditResponse {
   audit_log: AuditEntry[];
 }
 
+export interface User {
+  user_id: string;
+  name: string;
+  display_id: string;
+  role: string;
+}
+
+export interface UsersResponse {
+  users: User[];
+}
+
 // ─── API functions ────────────────────────────────────────────────────────────
 
 export const getStats = () => fetchAPI<StatsResponse>("/stats");
+
+export const getUsers = () => fetchAPI<UsersResponse>("/users");
+
+export async function deleteUser(userId: string): Promise<boolean> {
+  try {
+    const res = await fetch(`${API_BASE}/users/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+    });
+    return res.ok;
+  } catch (err) {
+    console.error("Delete user failed:", err);
+    return false;
+  }
+}
 
 export const getAccessLogs = (limit = 20, personId?: string) => {
   const qs = personId ? `?limit=${limit}&person_id=${personId}` : `?limit=${limit}`;

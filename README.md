@@ -83,60 +83,90 @@ The Next.js dev server proxies all `/api/*` requests to Flask automatically — 
 
 ## Project Structure
 
-```
-facedoor-1/
+At a high level:
+
+- **Backend API** in `api/`, `data/`, `models/`, wired up by `main.py`
+- **Next.js dashboard** in `frontend/`
+- **Docs** in `docs/`
+- **One-off scripts and tests** at the repo root (see below)
+
+```text
+project-root/
 │
 ├── main.py                        # Flask app entry point (API only)
-├── config.py                      # All configuration constants
+├── config.py                      # Configuration constants
 ├── requirements.txt               # Python dependencies
 │
-├── api/
+├── api/                           # REST API + recognition logic
 │   ├── __init__.py                # Flask app factory + CORS setup
-│   ├── routes.py                  # REST API endpoints
+│   ├── routes.py                  # REST API endpoints (/api/...)
 │   ├── facial_recognition.py      # Face detection & matching engine
 │   └── threat_detection.py        # Rules-based threat detection
 │
-├── models/
-│   └── anomaly_detection.py       # Isolation Forest anomaly detector
-│
-├── data/
+├── data/                          # Data layer + samples
 │   ├── database.py                # SQLite manager (all DB operations)
 │   ├── data_generator.py          # Synthetic training data generator
 │   ├── doorface.db                # SQLite database (auto-created)
-│   └── samples/                   # Captured face photos (auto-created)
+│   └── samples/                   # Captured face photos
 │       └── {person_name}/
-│           └── face_*.jpg
+│           └── *.jpg / *.png
 │
-├── frontend/                      # Next.js dashboard
+├── models/
+│   ├── anomaly_detection.py       # Isolation Forest anomaly detector
+│   └── isolation_forest.pkl       # Trained model artifact
+│
+├── frontend/                      # Next.js dashboard (App Router)
 │   ├── app/
 │   │   ├── layout.tsx             # Root layout with sidebar
-│   │   ├── page.tsx               # Dashboard (stats + charts)
-│   │   ├── alerts/page.tsx        # Security alerts
-│   │   ├── logs/page.tsx          # Access logs table
-│   │   └── compliance/page.tsx    # PIPEDA audit trail
+│   │   ├── page.tsx               # Main dashboard (stats + charts)
+│   │   ├── alerts/page.tsx        # Security alerts feed
+│   │   ├── logs/page.tsx          # Access logs + “Registered People”
+│   │   └── compliance/page.tsx    # Audit trail (compliance)
 │   ├── components/
 │   │   ├── Sidebar.tsx            # Collapsible nav sidebar
 │   │   ├── StatCard.tsx           # KPI stat cards
 │   │   ├── AccessChart.tsx        # Bar chart (entries/exits by hour)
 │   │   ├── StatusDonut.tsx        # Donut chart (access breakdown)
-│   │   ├── AccessLogsTable.tsx    # Paginated logs table
-│   │   ├── AlertList.tsx          # Threat alert cards
-│   │   └── AuditTable.tsx         # Compliance audit table
+│   │   ├── AccessLogsTable.tsx    # Paginated access log table
+│   │   ├── AlertList.tsx          # Threat alert cards list
+│   │   ├── AuditTable.tsx         # Compliance audit table
+│   │   └── StatusBadge.tsx        # Small status pill component
 │   ├── lib/
-│   │   ├── api.ts                 # Typed API client
-│   │   └── demoData.ts            # Demo data (shown when DB is empty)
-│   ├── next.config.ts             # API proxy config
+│   │   ├── api.ts                 # Typed API client (fetch wrappers)
+│   │   └── demoData.ts            # Demo data when DB is empty
+│   ├── next.config.ts             # API proxy (frontend ↔ Flask)
+│   ├── tailwind.config.ts         # Tailwind design system
 │   └── package.json
 │
-├── docs/                          # Architecture, API, deployment guides
+├── docs/                          # Architecture, API, deployment, security
+│   ├── ARCHITECTURE.md
+│   ├── API_DOCS.md
+│   ├── DEPLOYMENT.md
+│   ├── FACIAL_RECOGNITION_GUIDE.md
+│   ├── SECURITY.md
+│   └── TRAINING_GUIDE.md
 │
-└── Utility scripts
+├── screenshots/                   # UI screenshots for reports/README
+│   ├── dashboard.png
+│   ├── access-logs.png
+│   ├── alerts.png
+│   └── audit-trail.png
+│
+├── dashboard/                     # Legacy static HTML dashboard (unused)
+│   ├── templates/
+│   └── static/
+│
+└── Root-level scripts & tests     # Kept here for simplicity
     ├── capture_faces.py           # Capture face photos from webcam
-    ├── register_faces.py          # Register faces into the database
+    ├── register_faces.py          # Register faces into DB + encodings
+    ├── clear_database.py          # Reset the SQLite DB (keep samples/)
     ├── diagnose_recognition.py    # System diagnostics tool
-    ├── quick_test_recognition.py  # Quick recognition test
-    ├── test_integration.py        # End-to-end integration tests
-    └── train_anomaly_detection.py # Train the Isolation Forest model
+    ├── quick_test_recognition.py  # Quick recognition test against API
+    ├── train_anomaly_detection.py # Train the Isolation Forest model
+    ├── test_api_recognize.py      # API-level tests for /api/recognize
+    ├── test_face_recognition_real.py
+    ├── test_facial_recognition.py
+    └── test_integration.py        # End-to-end integration tests
 ```
 
 ---

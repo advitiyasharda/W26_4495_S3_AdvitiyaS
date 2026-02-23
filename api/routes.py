@@ -111,9 +111,12 @@ def recognize_face():
             )
         else:
             # Face detected but not recognized or below threshold
+            unknown_id = result["name"] or "Unknown"
+            db.add_user("Unknown", "Unknown", "resident")  # ensure FK exists
+            db.log_access("Unknown", "entry", confidence=float(conf), status="failed")
             db.log_audit(
                 "ACCESS_DENIED",
-                user_id=result["name"] or "Unknown",
+                user_id=unknown_id,
                 resource="door/main-entrance",
                 result="failed",
                 details=f"confidence={conf:.2f}",
@@ -121,7 +124,7 @@ def recognize_face():
             db.log_threat(
                 threat_type="Unrecognised Face Detected",
                 severity="HIGH",
-                user_id=result["name"] or "Unknown",
+                user_id=unknown_id,
                 message=(
                     f"Face detected at main entrance but no match in database. "
                     f"Confidence: {float(conf):.2f}."
@@ -180,7 +183,11 @@ def get_threats():
         
         # Query database for threats
         threats = get_db().get_active_threats(severity=severity)
-        
+        # Normalize timestamps: ensure UTC with Z so frontend displays in local time
+        for t in threats:
+            ts = t.get("timestamp") or ""
+            if isinstance(ts, str) and "Z" not in ts and "+" not in ts:
+                t["timestamp"] = ts.replace(" ", "T", 1).strip() + "Z"
         # Filter by person_id (user_id in DB) if provided
         if person_id:
             threats = [t for t in threats if t.get("user_id") == person_id]
@@ -194,6 +201,33 @@ def get_threats():
     except Exception as e:
         logger.error(f"Error retrieving threats: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+@api_bp.route("/users", methods=["GET"])
+def get_users():
+    """Return all registered users (for Unique People modal)."""
+    try:
+        users = get_db().get_users()
+        return jsonify({"users": users}), 200
+    except Exception as e:
+        logger.error("Error retrieving users: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/users/<user_id>", methods=["DELETE"])
+def delete_user(user_id):
+    """Remove a registered user (DB + face engine)."""
+    try:
+        if not user_id:
+            return jsonify({"error": "user_id required"}), 400
+        db = get_db()
+        if not db.delete_user(user_id):
+            return jsonify({"error": "User not found or cannot be deleted"}), 404
+        current_app.face_engine.remove_face(user_id)
+        return jsonify({"status": "deleted", "user_id": user_id}), 200
+    except Exception as e:
+        logger.exception("Error deleting user")
+        return jsonify({"error": str(e)}), 500
+
 
 @api_bp.route('/logs', methods=['GET'])
 def get_access_logs():
@@ -212,7 +246,11 @@ def get_access_logs():
         
         # Query database for access logs
         logs = get_db().get_access_logs(user_id=person_id)
-        
+        # Normalize timestamps: ensure UTC with Z so frontend displays in local time
+        for log in logs:
+            ts = log.get("timestamp") or ""
+            if isinstance(ts, str) and "Z" not in ts and "+" not in ts:
+                log["timestamp"] = ts.replace(" ", "T", 1).strip() + "Z"
         # Apply pagination
         paginated_logs = logs[offset:offset+limit]
         
@@ -273,10 +311,13 @@ def get_audit_log():
         
         # Query audit log database; map user_id -> user for frontend
         raw = get_db().get_audit_logs(limit=limit, offset=offset)
-        audit_log = [
-            {**row, "user": row.get("user_id")}
-            for row in raw
-        ]
+        audit_log = []
+        for row in raw:
+            entry = {**row, "user": row.get("user_id")}
+            ts = entry.get("timestamp") or ""
+            if isinstance(ts, str) and "Z" not in ts and "+" not in ts:
+                entry["timestamp"] = ts.replace(" ", "T", 1).strip() + "Z"
+            audit_log.append(entry)
         return jsonify({
             "audit_log": audit_log,
             "count": len(audit_log),

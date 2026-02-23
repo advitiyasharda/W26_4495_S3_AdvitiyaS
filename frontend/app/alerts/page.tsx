@@ -2,7 +2,6 @@
 
 import { useEffect, useState } from "react";
 import { getThreats, Threat } from "@/lib/api";
-import { DEMO_THREATS } from "@/lib/demoData";
 import AlertList from "@/components/AlertList";
 
 type Filter = "ALL" | "HIGH" | "CRITICAL";
@@ -17,21 +16,17 @@ export default function AlertsPage() {
   const [threats, setThreats] = useState<Threat[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("ALL");
-  const [usingDemo, setUsingDemo] = useState(false);
 
   const load = async (sev: Filter) => {
     setLoading(true);
     const data = await getThreats(sev === "ALL" ? undefined : sev);
     if (data && data.threats.length > 0) {
-      setThreats(data.threats);
-      setUsingDemo(false);
+      const list = data.threats;
+      const filtered =
+        sev === "ALL" ? list : list.filter((t) => t.severity === sev);
+      setThreats(filtered);
     } else {
-      // Fall back to demo data filtered by severity
-      const demo = sev === "ALL"
-        ? DEMO_THREATS
-        : DEMO_THREATS.filter((t) => t.severity === sev);
-      setThreats(demo);
-      setUsingDemo(true);
+      setThreats([]);
     }
     setLoading(false);
   };
@@ -51,11 +46,6 @@ export default function AlertsPage() {
           <p className="text-sm text-slate-400 mt-0.5">Real-time security threats and behavioural anomalies</p>
         </div>
         <div className="flex items-center gap-2">
-          {usingDemo && (
-            <span className="bg-amber-50 text-amber-600 text-xs font-medium px-2.5 py-1 rounded-full border border-amber-200">
-              Demo data
-            </span>
-          )}
           <span className="bg-red-50 text-red-600 font-semibold text-sm px-3 py-1 rounded-full">
             {threats.length} active
           </span>

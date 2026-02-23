@@ -52,8 +52,8 @@ def main():
         if key == ord(" ") or args.continuous:
             if args.continuous:
                 time.sleep(2)
-            # Encode frame as JPEG then base64
-            _, buf = cv2.imencode(".jpg", frame)
+            # Encode frame as high-quality JPEG (reduces loss vs default; helps recognition)
+            _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 98])
             b64 = base64.b64encode(buf.tobytes()).decode("utf-8")
             try:
                 req = urllib.request.Request(

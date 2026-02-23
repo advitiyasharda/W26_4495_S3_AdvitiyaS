@@ -1,10 +1,16 @@
 """
 Face Capture Utility - Capture face images from webcam
 Stores images in data/samples/{person_name}/ for use in training
+
+Run from project root: python3 scripts/capture_faces.py
 """
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 import cv2
 import os
-from pathlib import Path
 
 def capture_face_images(person_name, num_photos=10):
     """
@@ -100,8 +106,8 @@ def capture_face_images(person_name, num_photos=10):
         print(f"✓ SUCCESS: Captured {captured}/{num_photos} photos")
         print(f"✓ Saved to: {save_dir}/")
         print("\nNext steps:")
-        print("  1. python register_faces.py  (Register in system)")
-        print("  2. python test_facial_recognition.py  (Test detection)")
+        print("  1. python3 scripts/register_faces.py  (Register in system)")
+        print("  2. python3 tests/test_facial_recognition.py  (Test detection)")
         print("=" * 60)
         return True
     else:
@@ -173,7 +179,7 @@ def register_captured_person(person_name):
         if not db.add_user(person_id, person_name.replace('_', ' ').title(), role):
             print(f"  ✗ Could not add to database (database may be locked).")
             print(f"     Stop the Flask server (Ctrl+C in its terminal) and run:")
-            print(f"     python register_faces.py  → option 2 to register from photos")
+            print(f"     python3 scripts/register_faces.py  → option 2 to register from photos")
             return
         
         print(f"  ✓ Added to database")

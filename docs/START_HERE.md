@@ -63,12 +63,12 @@ python scripts/quick_test_recognition.py
 
 ### Core Algorithm (FIXED)
 - ✅ `api/facial_recognition.py` - Real matching now
-- ✅ `register_faces.py` - Real features now
+- ✅ `scripts/register_faces.py` - Real features now
 
 ### Testing Tools (NEW)
-- ✅ `quick_test_recognition.py` - Main test
-- ✅ `diagnose_recognition.py` - Diagnostics  
-- ✅ `test_face_recognition_real.py` - Extended tests
+- ✅ `scripts/quick_test_recognition.py` - Main test
+- ✅ `scripts/diagnose_recognition.py` - Diagnostics
+- ✅ `tests/test_face_recognition_real.py` - Extended tests
 
 ### Documentation (NEW)
 - ✅ `GET_STARTED.md` - Quick start
@@ -96,7 +96,7 @@ return {'person_id': match_id if is_match else None,
         'confidence': 1 - (best_distance/1.0)}
 ```
 
-### Problem 2: register_faces.py used random data
+### Problem 2: scripts/register_faces.py used random data
 ```python
 # OLD: Random encoding
 encoding = np.random.rand(128)

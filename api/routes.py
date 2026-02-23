@@ -95,16 +95,25 @@ def recognize_face():
         logger.info("Face recognized: %s (confidence: %.2f)", result["name"], result["confidence"])
         db = get_db()
         if access_granted and result["person_id"]:
-            db.add_user(result["person_id"], result["name"], "resident")  # ensure user exists
+            # Map recognition result to an existing user if possible to avoid duplicates.
+            # Prefer an existing DB user with the same name; otherwise, create a new user
+            # with the engine's person_id as the primary key.
+            db_user_id = result["person_id"]
+            existing = db.get_user_by_name(result["name"])
+            if existing:
+                db_user_id = existing.get("user_id", db_user_id)
+            else:
+                db.add_user(db_user_id, result["name"], "resident")
+
             db.log_access(
-                result["person_id"],
+                db_user_id,
                 "entry",
                 confidence=float(conf),
                 status="success",
             )
             db.log_audit(
                 "ACCESS_GRANTED",
-                user_id=result["person_id"],
+                user_id=db_user_id,
                 resource="door/main-entrance",
                 result="success",
                 details=f"confidence={conf:.2f}",

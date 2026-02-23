@@ -22,7 +22,7 @@ Select **Option 2**: Register from captured photos
 
 ### 3. Test Recognition
 ```bash
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 ```
 Expected result: **>80% accuracy** ✓
 
@@ -45,16 +45,16 @@ Expected result: **>80% accuracy** ✓
 ## 🔧 Tools & Utilities
 
 ### Testing Scripts
-- **quick_test_recognition.py** - Main testing tool (photo + webcam)
-- **test_face_recognition_real.py** - Extended testing
-- **diagnose_recognition.py** - Troubleshoot issues
-- **test_integration.py** - Full system test
-- **test_facial_recognition.py** - Component testing
+- **scripts/quick_test_recognition.py** - Main testing tool (photo + webcam)
+- **tests/test_face_recognition_real.py** - Extended testing
+- **scripts/diagnose_recognition.py** - Troubleshoot issues
+- **tests/test_integration.py** - Full system test
+- **tests/test_facial_recognition.py** - Component testing
 
 ### Utility Scripts
-- **capture_faces.py** - Capture photos from webcam
-- **register_faces.py** - Register captured photos
-- **train_anomaly_detection.py** - Train ML models
+- **scripts/capture_faces.py** - Capture photos from webcam
+- **scripts/register_faces.py** - Register captured photos
+- **scripts/train_anomaly_detection.py** - Train ML models
 
 ### API & Core
 - **main.py** - Flask API server
@@ -84,7 +84,7 @@ Expected result: **>80% accuracy** ✓
 
 ### The Root Cause
 - `recognize_face()` was returning placeholder results
-- `register_faces.py` was storing random encodings
+- `scripts/register_faces.py` was storing random encodings
 - No actual face feature extraction or comparison
 
 ### The Solution
@@ -191,14 +191,14 @@ System extracts features from each photo.
 
 ### Step 4: Test Accuracy
 ```bash
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 # Select: Option 1 - Test on stored photos
 ```
 Expected: **>80% accuracy**
 
 ### Step 5: Test Real-Time
 ```bash
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 # Select: Option 1, then Y for webcam test
 ```
 You should see your name in the webcam feed!
@@ -214,7 +214,7 @@ You should see your name in the webcam feed!
 rm -rf data/samples/
 python scripts/capture_faces.py  # Recapture with better lighting
 python scripts/register_faces.py
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 ```
 
 ### No Faces Detected
@@ -259,15 +259,15 @@ doortest/
 │   └── README.md (this file)
 │
 ├── Core Tools
-│   ├── capture_faces.py (← step 1)
-│   ├── register_faces.py (← step 2)
-│   ├── quick_test_recognition.py (← step 3)
-│   └── diagnose_recognition.py (← troubleshoot)
+│   ├── scripts/capture_faces.py (← step 1)
+│   ├── scripts/register_faces.py (← step 2)
+│   ├── scripts/quick_test_recognition.py (← step 3)
+│   └── scripts/diagnose_recognition.py (← troubleshoot)
 │
 ├── Testing
-│   ├── test_facial_recognition.py
-│   ├── test_face_recognition_real.py
-│   ├── test_integration.py
+│   ├── tests/test_facial_recognition.py
+│   ├── tests/test_face_recognition_real.py
+│   ├── tests/test_integration.py
 │   └── train_anomaly_detection.py
 │
 ├── API & Core
@@ -403,7 +403,7 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 
 ### Quick Issues
 1. Check **FACIAL_RECOGNITION_QUICKSTART.md** (5 min)
-2. Run `python scripts/diagnose_recognition.py` (troubleshooting)
+2. Run `python3 scripts/diagnose_recognition.py` (troubleshooting)
 3. Review **docs/FACIAL_RECOGNITION_GUIDE.md** (detailed)
 
 ### Deep Understanding
@@ -435,7 +435,7 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
    ```bash
    python scripts/capture_faces.py
    python scripts/register_faces.py
-   python quick_test_recognition.py
+   python scripts/quick_test_recognition.py
    ```
 
 2. ⬜ **Next week**: Integrate with dashboard

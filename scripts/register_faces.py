@@ -1,12 +1,20 @@
 """
 Face Registration Utility - Register captured faces in the system
-Adds people to database and facial recognition engine
+Adds people to database and facial recognition engine.
+
+Run from project root:
+  python3 scripts/register_faces.py
 """
+import sys
+from pathlib import Path
+
+# Ensure project root is on sys.path so 'data' and 'api' can be imported
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+
 from data.database import Database
 from api.facial_recognition import FacialRecognitionEngine
 import numpy as np
 import cv2
-from pathlib import Path
 
 class FaceRegistration:
     """Register faces in the Door Face Panels system"""

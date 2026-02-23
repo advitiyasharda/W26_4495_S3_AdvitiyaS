@@ -84,7 +84,7 @@ def diagnose_samples():
     
     if not sample_dir.exists():
         print("  ✗ No sample directory found!")
-        print("  Please run: python capture_faces.py")
+        print("  Please run: python scripts/capture_faces.py")
         return False
     
     people = list(sample_dir.iterdir())
@@ -318,8 +318,8 @@ def main():
     if all_passed:
         print("\n✓ ALL CHECKS PASSED!")
         print("\nYou can now use:")
-        print("  python quick_test_recognition.py")
-        print("  python test_integration.py")
+        print("  python scripts/quick_test_recognition.py")
+        print("  python tests/test_integration.py")
     else:
         print("\n⚠ Some checks failed. Review output above for solutions.")
     

@@ -181,7 +181,7 @@ To test facial recognition, create a sample image dataset:
        └── face_angle1.jpg
 
 4. Then run this test script again:
-   python test_facial_recognition.py
+   python tests/test_facial_recognition.py
     """)
 
 def integration_test():

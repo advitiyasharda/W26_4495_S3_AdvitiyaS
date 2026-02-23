@@ -4,6 +4,8 @@ Clear the SQLite database (access logs, users, threats, audit, etc.).
 Does NOT delete any pictures or folders in data/samples/.
 
 Stop the Flask backend before running this, then restart it after.
+
+Run from project root: python scripts/clear_database.py
 """
 from pathlib import Path
 

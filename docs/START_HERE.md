@@ -26,14 +26,14 @@ BEFORE                          AFTER
 
 ```bash
 # 1. Capture (press SPACE 10-15 times)
-python capture_faces.py
+python scripts/capture_faces.py
 
 # 2. Register
-python register_faces.py
+python scripts/register_faces.py
 # Choose: Option 2
 
 # 3. Test (see >80% accuracy)
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 ```
 
 **Done!** System is working. ✓
@@ -138,12 +138,12 @@ def _extract_face_features(face_roi):
 ## 🎯 YOUR CHECKLIST
 
 Start here:
-- [ ] Run `python diagnose_recognition.py`
-- [ ] Run `python capture_faces.py` (10-15 photos)
-- [ ] Run `python register_faces.py` (option 2)
-- [ ] Run `python quick_test_recognition.py` (option 1)
+- [ ] Run `python scripts/diagnose_recognition.py`
+- [ ] Run `python scripts/capture_faces.py` (10-15 photos)
+- [ ] Run `python scripts/register_faces.py` (option 2)
+- [ ] Run `python scripts/quick_test_recognition.py` (option 1)
 - [ ] Check result: >80% accuracy? ✅
-- [ ] Run `python quick_test_recognition.py` (option 1, then Y for webcam)
+- [ ] Run `python scripts/quick_test_recognition.py` (option 1, then Y for webcam)
 - [ ] See your name in camera? ✅
 - [ ] All items checked? **YOU'RE DONE!** 🎉
 
@@ -213,7 +213,7 @@ A: 90-95% with good photos, 75-85% with okay photos.
 A: Recapture with better lighting and more angles.
 
 **Q: Can I test it now?**  
-A: Yes! Just run `python capture_faces.py`
+A: Yes! Just run `python scripts/capture_faces.py`
 
 **Q: How long does it take?**  
 A: Capture (2 min) + Register (1 min) + Test (2 min) = 5 min total
@@ -240,7 +240,7 @@ A: Integrate with dashboard and API (day 2-3)
 
 ## 📞 IMMEDIATE NEXT STEPS
 
-1. **Right now**: Run `python diagnose_recognition.py`
+1. **Right now**: Run `python scripts/diagnose_recognition.py`
    - Takes 2 minutes
    - Verifies everything is working
    - Tells you if there are any issues
@@ -267,15 +267,15 @@ A: Integrate with dashboard and API (day 2-3)
 
 ```bash
 # Option 1: Full diagnostic (tells you if anything is wrong)
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 
 # Option 2: Quick 5-minute test
-python capture_faces.py           # Capture photos
-python register_faces.py          # Register (option 2)
-python quick_test_recognition.py # Test (should show >80% accuracy)
+python scripts/capture_faces.py           # Capture photos
+python scripts/register_faces.py          # Register (option 2)
+python scripts/quick_test_recognition.py # Test (should show >80% accuracy)
 
 # Option 3: Full system test  
-python test_integration.py
+python tests/test_integration.py
 
 # Option 4: View everything is working
 python main.py  # Starts API server
@@ -320,7 +320,7 @@ Documentation       ✅      N/A       N/A        6 guides
 
 **Command to run now:**
 ```bash
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 ```
 
 **What happens:**
@@ -331,9 +331,9 @@ python diagnose_recognition.py
 
 **Then:**
 ```bash
-python capture_faces.py
-python register_faces.py
-python quick_test_recognition.py
+python scripts/capture_faces.py
+python scripts/register_faces.py
+python scripts/quick_test_recognition.py
 ```
 
 **Result:** You see your face recognized in real-time with 85-95% accuracy! 🎉
@@ -351,7 +351,7 @@ python quick_test_recognition.py
 
 Start testing now:
 ```bash
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 ```
 
 Then share your results! 😊

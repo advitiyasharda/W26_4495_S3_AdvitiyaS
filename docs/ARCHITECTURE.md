@@ -82,7 +82,7 @@ data/samples/{name}/
   ├─ face_002.jpg
   └─ ...
      │
-     ↓ [register_faces.py]
+     ↓ [scripts/register_faces.py]
      │
 Face Detection
 (Haar Cascade)

@@ -3,9 +3,9 @@
 Test the /api/recognize endpoint with a live webcam frame.
 Backend must be running: FLASK_PORT=5001 python3 main.py
 
-Usage:
-  python3 test_api_recognize.py              # one snapshot when you press SPACE
-  python3 test_api_recognize.py --continuous # send a frame every 2 seconds
+Usage (from project root):
+  python tests/test_api_recognize.py              # one snapshot when you press SPACE
+  python tests/test_api_recognize.py --continuous # send a frame every 2 seconds
 """
 import argparse
 import base64

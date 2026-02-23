@@ -10,13 +10,13 @@ Your facial recognition system is **fully functional** and ready to use.
 
 ### 1. Capture Your Face
 ```bash
-python capture_faces.py
+python scripts/capture_faces.py
 ```
 Press **SPACE** to capture (10-15 times), **Q** to exit.
 
 ### 2. Register Your Face
 ```bash
-python register_faces.py
+python scripts/register_faces.py
 ```
 Select **Option 2**: Register from captured photos
 
@@ -167,13 +167,13 @@ Return: {person_id: "A", confidence: 0.92}
 
 ### Step 1: Verify Camera Works
 ```bash
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 ```
 Checks: camera, face detection, database, etc.
 
 ### Step 2: Capture Photos
 ```bash
-python capture_faces.py
+python scripts/capture_faces.py
 ```
 **Tips:**
 - 10-15 photos per person
@@ -184,7 +184,7 @@ python capture_faces.py
 
 ### Step 3: Register Photos
 ```bash
-python register_faces.py
+python scripts/register_faces.py
 # Select: Option 2 - Register from captured photos
 ```
 System extracts features from each photo.
@@ -212,8 +212,8 @@ You should see your name in the webcam feed!
 **Solution**: 
 ```bash
 rm -rf data/samples/
-python capture_faces.py  # Recapture with better lighting
-python register_faces.py
+python scripts/capture_faces.py  # Recapture with better lighting
+python scripts/register_faces.py
 python quick_test_recognition.py
 ```
 
@@ -235,7 +235,7 @@ python quick_test_recognition.py
 
 ### Diagnosis
 ```bash
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 ```
 Shows which component has issues + solutions.
 
@@ -403,7 +403,7 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 
 ### Quick Issues
 1. Check **FACIAL_RECOGNITION_QUICKSTART.md** (5 min)
-2. Run `python diagnose_recognition.py` (troubleshooting)
+2. Run `python scripts/diagnose_recognition.py` (troubleshooting)
 3. Review **docs/FACIAL_RECOGNITION_GUIDE.md** (detailed)
 
 ### Deep Understanding
@@ -433,8 +433,8 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 
 1. ✅ **This week**: Test your face recognition
    ```bash
-   python capture_faces.py
-   python register_faces.py
+   python scripts/capture_faces.py
+   python scripts/register_faces.py
    python quick_test_recognition.py
    ```
 
@@ -469,7 +469,7 @@ Your facial recognition system is **now fully working**. It can:
 - ✓ Log to database
 - ✓ Integrate with API
 
-**Start here**: `python capture_faces.py` 🚀
+**Start here**: `python scripts/capture_faces.py` 🚀
 
 ---
 

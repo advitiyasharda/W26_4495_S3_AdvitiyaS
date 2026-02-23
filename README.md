@@ -87,8 +87,9 @@ At a high level:
 
 - **Backend API** in `api/`, `data/`, `models/`, wired up by `main.py`
 - **Next.js dashboard** in `frontend/`
+- **Scripts** in `scripts/` (capture, register, diagnose, train, etc.)
+- **Tests** in `tests/`
 - **Docs** in `docs/`
-- **One-off scripts and tests** at the repo root (see below)
 
 ```text
 project-root/
@@ -138,13 +139,29 @@ project-root/
 │   ├── tailwind.config.ts         # Tailwind design system
 │   └── package.json
 │
-├── docs/                          # Architecture, API, deployment, security
+├── scripts/                       # Utility scripts (run from project root)
+│   ├── capture_faces.py           # Capture face photos from webcam
+│   ├── register_faces.py          # Register faces into DB + encodings
+│   ├── clear_database.py          # Reset the SQLite DB (keep samples/)
+│   ├── diagnose_recognition.py   # System diagnostics tool
+│   ├── quick_test_recognition.py # Quick recognition test
+│   └── train_anomaly_detection.py# Train ML models
+│
+├── tests/                         # Test scripts (run from project root)
+│   ├── test_api_recognize.py      # API-level tests for /api/recognize
+│   ├── test_face_recognition_real.py
+│   ├── test_facial_recognition.py
+│   └── test_integration.py       # End-to-end integration tests
+│
+├── docs/                          # Architecture, API, deployment, guides
 │   ├── ARCHITECTURE.md
 │   ├── API_DOCS.md
 │   ├── DEPLOYMENT.md
 │   ├── FACIAL_RECOGNITION_GUIDE.md
+│   ├── GET_STARTED.md
 │   ├── SECURITY.md
-│   └── TRAINING_GUIDE.md
+│   ├── TRAINING_GUIDE.md
+│   └── images/                   # Doc images
 │
 ├── screenshots/                   # UI screenshots for reports/README
 │   ├── dashboard.png
@@ -152,26 +169,16 @@ project-root/
 │   ├── alerts.png
 │   └── audit-trail.png
 │
-├── dashboard/                     # Legacy static HTML dashboard (unused)
-│   ├── templates/
-│   └── static/
-│
-└── Root-level scripts & tests     # Kept here for simplicity
-    ├── capture_faces.py           # Capture face photos from webcam
-    ├── register_faces.py          # Register faces into DB + encodings
-    ├── clear_database.py          # Reset the SQLite DB (keep samples/)
-    ├── diagnose_recognition.py    # System diagnostics tool
-    ├── quick_test_recognition.py  # Quick recognition test against API
-    ├── train_anomaly_detection.py # Train the Isolation Forest model
-    ├── test_api_recognize.py      # API-level tests for /api/recognize
-    ├── test_face_recognition_real.py
-    ├── test_facial_recognition.py
-    └── test_integration.py        # End-to-end integration tests
+└── dashboard/                     # Legacy static HTML dashboard (unused)
+    ├── templates/
+    └── static/
 ```
 
 ---
 
 ## Getting Started
+
+> **Important:** Always run commands from the **project root** directory. Scripts and tests expect to find `data/`, `api/`, and `models/` relative to the current working directory.
 
 ### Prerequisites
 
@@ -227,10 +234,10 @@ Before the system can recognise anyone, you need to register faces:
 
 ```bash
 # Step 1 — capture face photos from your webcam
-python capture_faces.py
+python scripts/capture_faces.py
 
 # Step 2 — register the captured photos into the database
-python register_faces.py
+python scripts/register_faces.py
 ```
 
 The system will prompt for a name, capture several photos, extract HOG features, and store them in `data/samples/` and the SQLite database.
@@ -249,7 +256,7 @@ Once faces are registered:
 If recognition is not working:
 
 ```bash
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 ```
 
 This checks camera connectivity, face detection, stored samples, recognition accuracy, and database health.
@@ -358,14 +365,16 @@ FaceDoor is designed with **PIPEDA** (Canada) and **GDPR** compliance in mind:
 
 | Script                        | Purpose                                            |
 |-------------------------------|----------------------------------------------------|
-| `capture_faces.py`            | Capture face photos from webcam for registration   |
-| `register_faces.py`           | Register captured photos, extract HOG features     |
-| `diagnose_recognition.py`     | Full system diagnostics (camera, DB, recognition)  |
-| `quick_test_recognition.py`   | Quick test: photo + live webcam recognition        |
-| `test_facial_recognition.py`  | Component-level recognition tests                  |
-| `test_face_recognition_real.py` | Extended webcam + photo recognition tests        |
-| `test_integration.py`         | End-to-end pipeline integration tests              |
-| `train_anomaly_detection.py`  | Generate synthetic data and train Isolation Forest |
+| `scripts/capture_faces.py`            | Capture face photos from webcam for registration   |
+| `scripts/register_faces.py`           | Register captured photos, extract HOG features     |
+| `scripts/clear_database.py`          | Reset the SQLite DB (keep samples/)                |
+| `scripts/diagnose_recognition.py`     | Full system diagnostics (camera, DB, recognition)  |
+| `scripts/quick_test_recognition.py`   | Quick test: photo + live webcam recognition        |
+| `scripts/train_anomaly_detection.py`  | Generate synthetic data and train Isolation Forest |
+| `tests/test_facial_recognition.py`    | Component-level recognition tests                  |
+| `tests/test_face_recognition_real.py` | Extended webcam + photo recognition tests          |
+| `tests/test_integration.py`           | End-to-end pipeline integration tests              |
+| `tests/test_api_recognize.py`         | API-level tests for /api/recognize (webcam)        |
 
 ---
 

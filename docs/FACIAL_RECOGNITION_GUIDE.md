@@ -13,13 +13,13 @@ This guide walks you through the complete facial recognition pipeline:
 
 ```bash
 # Step 1: Capture photos of your face
-python capture_faces.py
+python scripts/capture_faces.py
 
 # Step 2: Register your captured photos
-python register_faces.py
+python scripts/register_faces.py
 
 # Step 3: Test recognition
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 ```
 
 ---
@@ -29,7 +29,7 @@ python quick_test_recognition.py
 ### Step 1: Capture Face Photos
 
 ```bash
-python capture_faces.py
+python scripts/capture_faces.py
 ```
 
 **What happens:**
@@ -59,7 +59,7 @@ Captured: data/samples/advitiya/face_015.jpg
 ### Step 2: Register Photos
 
 ```bash
-python register_faces.py
+python scripts/register_faces.py
 ```
 
 **What happens:**
@@ -109,7 +109,7 @@ Loading face encodings for advitiya...
 #### Option A: Quick Test on Stored Photos
 
 ```bash
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 ```
 
 **Output:**
@@ -152,7 +152,7 @@ FACIAL RECOGNITION PIPELINE TEST
 #### Option B: Test with Live Webcam
 
 ```bash
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 # When prompted: Press Y for webcam test
 ```
 
@@ -181,7 +181,7 @@ advitiya (0.87)  ← Your name + confidence
 ### Step 4: Full System Test (With API)
 
 ```bash
-python test_integration.py
+python tests/test_integration.py
 ```
 
 **Tests:**
@@ -218,13 +218,13 @@ python test_integration.py
 rm -rf data/samples/
 
 # 2. Recapture with better technique
-python capture_faces.py
+python scripts/capture_faces.py
 
 # 3. Re-register
-python register_faces.py
+python scripts/register_faces.py
 
 # 4. Retest
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 ```
 
 ### Problem: Webcam doesn't open
@@ -328,10 +328,10 @@ For each test face:
 
 ```
 doortest/
-├── capture_faces.py              # Webcam capture utility
-├── register_faces.py             # Registration system
-├── quick_test_recognition.py     # Testing script
-├── test_facial_recognition.py    # Full test suite
+├── scripts/capture_faces.py      # Webcam capture utility
+├── scripts/register_faces.py     # Registration system
+├── scripts/quick_test_recognition.py  # Testing script
+├── tests/test_facial_recognition.py   # Full test suite
 ├── api/
 │   └── facial_recognition.py    # Core recognition engine
 │       ├── FacialRecognitionEngine (main class)
@@ -399,7 +399,7 @@ For issues:
 1. Check troubleshooting section above
 2. Review photo quality and lighting
 3. Check database integrity: `sqlite3 data/doorface.db ".tables"`
-4. View face statistics: `python register_faces.py` → Option 4
+4. View face statistics: `python scripts/register_faces.py` → Option 4
 
 ---
 

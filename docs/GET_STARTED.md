@@ -24,7 +24,7 @@ We implemented a real face recognition algorithm using:
 
 ### Step 1: Capture Your Face
 ```bash
-python capture_faces.py
+python scripts/capture_faces.py
 ```
 - **What to do**: Face the camera and press SPACE 10-15 times
 - **Vary**: Angles (left, right, up, down), lighting, distance
@@ -33,7 +33,7 @@ python capture_faces.py
 
 ### Step 2: Register Your Photos  
 ```bash
-python register_faces.py
+python scripts/register_faces.py
 ```
 - **Choose**: Option `2) Register from captured photos`
 - **Select**: Your name from list
@@ -42,7 +42,7 @@ python register_faces.py
 
 ### Step 3: Test Recognition
 ```bash
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 ```
 - **Auto-test**: Shows accuracy % on your stored photos
 - **Live test**: Optional webcam test (press Y when prompted)
@@ -75,32 +75,32 @@ python quick_test_recognition.py
 ## Testing Tools
 
 ### For Testing & Verification
-1. **quick_test_recognition.py** ← START HERE
+1. **scripts/quick_test_recognition.py** ← START HERE
    - Test accuracy on stored photos
    - Optional live webcam test
    - Shows summary statistics
 
-2. **test_face_recognition_real.py**
+2. **tests/test_face_recognition_real.py**
    - Extended testing with detailed output
    - Multiple test modes
    - Comprehensive reporting
 
-3. **diagnose_recognition.py**
+3. **scripts/diagnose_recognition.py**
    - Diagnose any issues
    - Checks: camera, detection, samples, database
    - Provides solutions for problems
 
 ### For Integration
-1. **test_integration.py** - Full system test
-2. **test_facial_recognition.py** - Component testing
-3. **train_anomaly_detection.py** - Train detection models
+1. **tests/test_integration.py** - Full system test
+2. **tests/test_facial_recognition.py** - Component testing
+3. **scripts/train_anomaly_detection.py** - Train detection models
 
 ---
 
 ## Documentation
 
 ### Quick Reference
-- **FACIAL_RECOGNITION_QUICKSTART.md** ← Start here!
+- **docs/FACIAL_RECOGNITION_QUICKSTART.md** ← Start here!
   - 5-minute overview
   - Quick commands
   - Troubleshooting table
@@ -112,7 +112,7 @@ python quick_test_recognition.py
   - Advanced parameters
   - Performance metrics
 
-- **SOLUTION_SUMMARY.md**
+- **docs/SOLUTION_SUMMARY.md**
   - What was fixed
   - How it works
   - Technical details
@@ -128,10 +128,11 @@ doortest/
 ├── SOLUTION_SUMMARY.md                  ← What was fixed
 ├── GET_STARTED.md                       ← This file
 │
-├── capture_faces.py                     ← Step 1: Capture photos
-├── register_faces.py                    ← Step 2: Register photos
-├── quick_test_recognition.py            ← Step 3: Test (START HERE!)
-├── diagnose_recognition.py              ← Troubleshoot issues
+├── scripts/
+│   ├── capture_faces.py                 ← Step 1: Capture photos
+│   ├── register_faces.py                ← Step 2: Register photos
+│   ├── quick_test_recognition.py        ← Step 3: Test (START HERE!)
+│   └── diagnose_recognition.py          ← Troubleshoot issues
 │
 ├── api/
 │   ├── facial_recognition.py            ← Core algorithm (FIXED)
@@ -163,25 +164,25 @@ doortest/
 ### Testing (Recommended Order)
 ```bash
 # 1. Check system setup
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 
 # 2. Capture fresh photos
-python capture_faces.py
+python scripts/capture_faces.py
 
 # 3. Register those photos
-python register_faces.py
+python scripts/register_faces.py
 
 # 4. Test recognition accuracy
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 
 # 5. Full system integration test
-python test_integration.py
+python tests/test_integration.py
 ```
 
 ### Management
 ```bash
 # View registered people
-python register_faces.py
+python scripts/register_faces.py
 # Select option 4: View statistics
 
 # Check database
@@ -298,7 +299,7 @@ Once ALL items are checked:
 
 ### Diagnostic Tool
 ```bash
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 ```
 Checks everything and provides specific solutions.
 
@@ -351,7 +352,7 @@ A: Tested with 100+. Scales linearly with comparison time.
 ## Getting Help
 
 1. **Check this guide** - FACIAL_RECOGNITION_QUICKSTART.md
-2. **Run diagnostics** - `python diagnose_recognition.py`
+2. **Run diagnostics** - `python scripts/diagnose_recognition.py`
 3. **Review full guide** - `docs/FACIAL_RECOGNITION_GUIDE.md`
 4. **Check solution summary** - `SOLUTION_SUMMARY.md`
 
@@ -361,7 +362,7 @@ A: Tested with 100+. Scales linearly with comparison time.
 
 ```bash
 # Let's go! 
-python capture_faces.py
+python scripts/capture_faces.py
 ```
 
 Good luck! 🚀

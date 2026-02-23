@@ -16,7 +16,7 @@ Your Door Face Panels system now has working facial recognition! Here's how to t
 
 ### 1. Capture Your Face
 ```bash
-python capture_faces.py
+python scripts/capture_faces.py
 ```
 - Webcam opens with face detection
 - Press **SPACE** 10-15 times to capture photos
@@ -31,7 +31,7 @@ python capture_faces.py
 
 ### 2. Register Your Photos
 ```bash
-python register_faces.py
+python scripts/register_faces.py
 ```
 - Choose option: **2) Register from captured photos**
 - Select your name
@@ -40,7 +40,7 @@ python register_faces.py
 
 ### 3. Test Recognition
 ```bash
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 ```
 - **Automatically tests stored photos** → Shows accuracy %
 - **Optionally test live webcam** → See real-time recognition
@@ -73,17 +73,17 @@ python quick_test_recognition.py
 1. **Delete old photos**: `rm -rf data/samples/`
 2. **Recapture carefully**:
    ```bash
-   python capture_faces.py
+   python scripts/capture_faces.py
    # Capture 15-20 photos with varied angles/lighting
    ```
 3. **Re-register**:
    ```bash
-   python register_faces.py
+   python scripts/register_faces.py
    # Option 2: Register from photos
    ```
 4. **Retest**:
    ```bash
-   python quick_test_recognition.py
+   python scripts/quick_test_recognition.py
    ```
 
 ### Webcam won't open
@@ -98,7 +98,7 @@ python quick_test_recognition.py
 ### Database issues
 ```bash
 # View database stats
-python register_faces.py
+python scripts/register_faces.py
 # Select option 4: View statistics
 
 # Check database integrity
@@ -112,7 +112,7 @@ sqlite3 data/doorface.db ".tables"
 If something isn't working, run the diagnostics:
 
 ```bash
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 ```
 
 This checks:
@@ -176,15 +176,15 @@ doortest/
 ```
 CAPTURE PHOTOS
      ↓
-python capture_faces.py
+python scripts/capture_faces.py
      ↓
 REGISTER PHOTOS
      ↓
-python register_faces.py
+python scripts/register_faces.py
      ↓
 TEST RECOGNITION
      ↓
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
      ↓
 GET RESULTS
 ✓ Recognition working? → DONE!
@@ -198,22 +198,22 @@ GET RESULTS
 
 ### Full System Integration Test
 ```bash
-python test_integration.py
+python tests/test_integration.py
 ```
 Tests: API health, access logging, anomaly detection, database persistence
 
 ### Individual Component Tests
 ```bash
 # Face detection only
-python test_facial_recognition.py
+python tests/test_facial_recognition.py
 # Option 1: Test face detection
 
 # Live webcam recognition
-python test_facial_recognition.py
+python tests/test_facial_recognition.py
 # Option 2: Test face recognition (webcam)
 
 # Recognition on stored photos
-python test_facial_recognition.py
+python tests/test_facial_recognition.py
 # Option 3: Test recognition (photos)
 ```
 
@@ -263,19 +263,19 @@ Once recognition is working:
 rm -rf data/samples/*
 
 # Capture faces
-python capture_faces.py
+python scripts/capture_faces.py
 
 # Register faces
-python register_faces.py
+python scripts/register_faces.py
 
 # Test accuracy
-python quick_test_recognition.py
+python scripts/quick_test_recognition.py
 
 # Diagnose issues
-python diagnose_recognition.py
+python scripts/diagnose_recognition.py
 
 # Full system test
-python test_integration.py
+python tests/test_integration.py
 
 # View database
 sqlite3 data/doorface.db
@@ -308,7 +308,7 @@ You now have:
 ✅ Diagnostics tool (diagnose_recognition.py)
 ✅ Complete documentation (FACIAL_RECOGNITION_GUIDE.md)
 
-**Start with**: `python capture_faces.py`
+**Start with**: `python scripts/capture_faces.py`
 
 ---
 

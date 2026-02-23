@@ -51,10 +51,30 @@ class Database:
                 user_id TEXT PRIMARY KEY,
                 name TEXT NOT NULL,
                 role TEXT DEFAULT 'resident',
+                display_id TEXT,
                 created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
                 updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             )
         ''')
+        # Add display_id column if it doesn't exist (migration for existing DBs)
+        try:
+            cursor.execute(
+                "ALTER TABLE users ADD COLUMN display_id TEXT"
+            )
+            self.conn.commit()
+        except Exception:
+            pass
+        # Backfill display_id for existing users (so Person ID column shows RES-001 etc.)
+        cursor.execute("SELECT user_id FROM users WHERE display_id IS NULL OR TRIM(COALESCE(display_id, '')) = ''")
+        need_id = cursor.fetchall()
+        cursor.execute(
+            "SELECT COALESCE(MAX(CAST(SUBSTR(display_id, 5) AS INTEGER)), 0) FROM users WHERE display_id GLOB 'RES-*'"
+        )
+        next_num = cursor.fetchone()[0] + 1
+        for i, (uid,) in enumerate(need_id):
+            cursor.execute("UPDATE users SET display_id = ? WHERE user_id = ?", (f"RES-{next_num + i:03d}", uid))
+        if need_id:
+            self.conn.commit()
         
         # Access Log table
         cursor.execute('''
@@ -132,14 +152,30 @@ class Database:
         self.conn.commit()
         logger.info("Database schema initialized")
     
+    def _next_display_id(self, cursor) -> str:
+        """Generate next RES-xxx display ID for the Person ID column."""
+        cursor.execute('''
+            SELECT COALESCE(MAX(CAST(SUBSTR(display_id, 5) AS INTEGER)), 0) + 1
+            FROM users WHERE display_id GLOB 'RES-*'
+        ''')
+        n = cursor.fetchone()[0]
+        return f"RES-{n:03d}"
+
     def add_user(self, user_id: str, name: str, role: str = 'resident') -> bool:
-        """Add a new user"""
+        """Add a new user; assigns a display_id (e.g. RES-001) for Person ID column."""
         try:
             cursor = self.conn.cursor()
+            display_id = self._next_display_id(cursor)
             cursor.execute('''
-                INSERT OR IGNORE INTO users (user_id, name, role)
-                VALUES (?, ?, ?)
-            ''', (user_id, name, role))
+                INSERT OR IGNORE INTO users (user_id, name, role, display_id)
+                VALUES (?, ?, ?, ?)
+            ''', (user_id, name, role, display_id))
+            if cursor.rowcount == 0:
+                # User already exists; backfill display_id if missing
+                cursor.execute(
+                    "UPDATE users SET display_id = ? WHERE user_id = ? AND (display_id IS NULL OR display_id = '')",
+                    (self._next_display_id(cursor), user_id)
+                )
             self.conn.commit()
             logger.info(f"User added: {name} ({user_id})")
             return True
@@ -163,16 +199,20 @@ class Database:
             logger.error(f"Error logging access: {e}")
             return False
     
+    # Demo/seed user IDs to exclude from access logs so dashboard shows only real recognition data
+    DEMO_USER_IDS = frozenset({'caregiver_001', 'resident_001'})
+
     def get_access_logs(self, user_id: str = None,
                        limit: int = 100, offset: int = 0) -> List[Dict]:
-        """Retrieve access logs joined with user names, mapped to frontend field names."""
+        """Retrieve access logs joined with user names, mapped to frontend field names.
+        Excludes known demo/seed user IDs so only real face-recognition entries appear."""
         try:
             cursor = self.conn.cursor()
 
             base_query = '''
                 SELECT
                     al.log_id,
-                    al.user_id        AS person_id,
+                    COALESCE(NULLIF(TRIM(u.display_id), ''), u.user_id) AS person_id,
                     u.name            AS name,
                     al.access_type    AS type,
                     al.confidence,
@@ -181,16 +221,20 @@ class Database:
                 FROM access_logs al
                 LEFT JOIN users u ON al.user_id = u.user_id
             '''
+            exclude_demo = ' AND al.user_id NOT IN ({})'.format(
+                ','.join('?' * len(self.DEMO_USER_IDS))
+            )
+            params_demo = tuple(self.DEMO_USER_IDS)
 
             if user_id:
                 cursor.execute(
-                    base_query + ' WHERE al.user_id = ? ORDER BY al.timestamp DESC LIMIT ? OFFSET ?',
-                    (user_id, limit, offset)
+                    base_query + ' WHERE al.user_id = ?' + exclude_demo + ' ORDER BY al.timestamp DESC LIMIT ? OFFSET ?',
+                    (user_id,) + params_demo + (limit, offset)
                 )
             else:
                 cursor.execute(
-                    base_query + ' ORDER BY al.timestamp DESC LIMIT ? OFFSET ?',
-                    (limit, offset)
+                    base_query + ' WHERE 1=1' + exclude_demo + ' ORDER BY al.timestamp DESC LIMIT ? OFFSET ?',
+                    params_demo + (limit, offset)
                 )
 
             rows = cursor.fetchall()

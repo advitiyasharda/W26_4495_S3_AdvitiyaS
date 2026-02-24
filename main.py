@@ -25,7 +25,7 @@ def main():
     logger.info("=" * 60)
 
     host = os.environ.get('FLASK_HOST', '0.0.0.0')
-    port = int(os.environ.get('FLASK_PORT', 5000))
+    port = int(os.environ.get('FLASK_PORT', 5001))
     debug = os.environ.get('FLASK_ENV') == 'development'
 
     logger.info(f"Flask API running on http://{host}:{port}")

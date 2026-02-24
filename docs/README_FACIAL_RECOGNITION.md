@@ -1,12 +1,12 @@
 # Door Face Panels - Facial Recognition System
 
-## Status: ✅ WORKING
+## Status:  WORKING
 
 Your facial recognition system is **fully functional** and ready to use.
 
 ---
 
-## 🚀 Quick Start (5 Minutes)
+##  Quick Start (5 Minutes)
 
 ### 1. Capture Your Face
 ```bash
@@ -30,7 +30,7 @@ Expected result: **>80% accuracy** ✓
 
 ---
 
-## 📚 Documentation Map
+##  Documentation Map
 
 | Document | Purpose | Read When |
 |----------|---------|-----------|
@@ -42,7 +42,7 @@ Expected result: **>80% accuracy** ✓
 
 ---
 
-## 🔧 Tools & Utilities
+##  Tools & Utilities
 
 ### Testing Scripts
 - **scripts/quick_test_recognition.py** - Main testing tool (photo + webcam)
@@ -64,7 +64,7 @@ Expected result: **>80% accuracy** ✓
 
 ---
 
-## ✅ What's Working
+##  What's Working
 
 - ✓ Face detection (Haar Cascade)
 - ✓ Face feature extraction (HOG - 128-dim)
@@ -77,7 +77,7 @@ Expected result: **>80% accuracy** ✓
 
 ---
 
-## 🐛 What Was Fixed
+##  What Was Fixed
 
 ### The Problem
 "I captured my face but the system doesn't recognize me"
@@ -106,7 +106,7 @@ Expected result: **>80% accuracy** ✓
 
 ---
 
-## 🎯 How It Works
+##  How It Works
 
 ### 3-Step Pipeline
 
@@ -148,7 +148,7 @@ Return: {person_id: "A", confidence: 0.92}
 
 ---
 
-## 📊 Performance
+##  Performance
 
 | Metric | Value |
 |--------|-------|
@@ -163,7 +163,7 @@ Return: {person_id: "A", confidence: 0.92}
 
 ---
 
-## 🎬 Getting Started (Step-by-Step)
+##  Getting Started (Step-by-Step)
 
 ### Step 1: Verify Camera Works
 ```bash
@@ -205,7 +205,7 @@ You should see your name in the webcam feed!
 
 ---
 
-## 🔍 Troubleshooting
+##  Troubleshooting
 
 ### Low Accuracy (<50%)
 **Cause**: Poor photo quality, bad lighting, few photos  
@@ -241,7 +241,7 @@ Shows which component has issues + solutions.
 
 ---
 
-## 📁 File Structure
+##  File Structure
 
 ```
 doortest/

@@ -11,21 +11,46 @@ A facial recognition-based access control and monitoring system designed for eld
 - [Tech Stack](#tech-stack)
 - [Project Structure](#project-structure)
 - [Getting Started](#getting-started)
-  - [Prerequisites](#prerequisites)
-  - [1. Backend (Flask API)](#1-backend-flask-api)
-  - [2. Frontend (Next.js)](#2-frontend-nextjs)
 - [Usage](#usage)
   - [Registering Faces](#registering-faces)
   - [Running the System](#running-the-system)
   - [Diagnostics](#diagnostics)
 - [API Reference](#api-reference)
 - [Dashboard Pages](#dashboard-pages)
-- [Screenshots](#screenshots)
+- [Scripts](#scripts)
 - [Configuration](#configuration)
 - [Compliance](#compliance)
-- [Scripts](#scripts)
+- [Screenshots](#screenshots)
 
 ---
+
+## Repository Guidelines
+
+This GitHub repo follows the CSIS‑4495 requirements:
+
+* **Name format:** `W26_4495_S3_FirstNameLastInitial` (e.g. `W26_4495_S3_AdvitiyaS`).
+  The team lead (or lone student) owns the repo and is responsible for all joint
+  submissions.
+* **Default branch:** `main` – please work and push changes there.
+* **Add the instructor** (`kandhadaip@douglascollege.ca`) as a collaborator to the
+  repository.
+
+## Repository Layout
+
+This project follows the course guidelines for GitHub submissions. The top-level
+folders are:
+
+- `Implementation/` – **all source code and scripts** live here; run from within
+  this directory when starting the backend or frontend.
+- `ReportsAndDocuments/` – contains design docs, architecture notes, and the
+  midterm/final reports (including `MidtermReport.md`).
+- `README.md` – you are reading it now.
+
+(There are also a couple of legacy folders at the root for compatibility, but
+all active development occurs under `Implementation/`.)
+
+The default branch for development is **main**; please ensure you are working
+and pushing to `main` and that the instructor is added as a collaborator.
 
 ## Overview
 
@@ -178,55 +203,56 @@ project-root/
 
 ## Getting Started
 
-> **Important:** Always run commands from the **project root** directory. Scripts and tests expect to find `data/`, `api/`, and `models/` relative to the current working directory.
+> **Run all commands from the project root.**
 
 ### Prerequisites
 
-| Tool       | Version  | Download                        |
-|------------|----------|---------------------------------|
-| Python     | 3.12+    | https://www.python.org          |
-| Node.js    | 18+ LTS  | https://nodejs.org              |
-| npm        | 9+       | Included with Node.js           |
+| Tool       | Version | Notes                        |
+|------------|---------|------------------------------|
+| Python     | 3.12+   | pip included                 |
+| Node.js    | 18+ LTS | npm included                 |
 
-> **Note:** Both were automatically installed via `winget` during initial setup on Windows.
-
----
-
-### 1. Backend (Flask API)
+### Installation
 
 ```bash
-# Install Python dependencies
+# clone repository and enter the project root
+git clone https://github.com/advitiyasharda/W26_4495_S3_AdvitiyaS.git
+cd W26_4495_S3_AdvitiyaS
+
+# change into the Implementation folder where all source code lives
+cd Implementation
+
+# install backend dependencies
 pip install -r requirements.txt
+python -c "import data.database as db; db.init_db('data/doorface.db')"
+# (optional) populate sample faces for demo
+python scripts/register_faces.py --samples data/samples
 
-# Start the API server
-python main.py
+# install frontend dependencies
+cd frontend
+npm install
+cd ..
 ```
 
-Flask API will be available at **http://localhost:5000**
+### Starting the system
 
----
-
-### 2. Frontend (Next.js)
-
-Open a **second terminal**:
+From within the `Implementation` directory, open two terminals:
 
 ```bash
-cd frontend
+# terminal 1: start backend
+python main.py
 
-# Install Node dependencies (first time only)
-npm install
-
-# Start the dev server
-npm run dev
+# terminal 2: start frontend
+cd frontend && npm run dev
 ```
 
-Dashboard will be available at **http://localhost:3000**
+Backend: http://localhost:5000  
+Frontend: http://localhost:3000
 
-> Both servers must be running at the same time. The frontend proxies all `/api/*` calls to Flask automatically.
-
----
 
 ## Usage
+
+To see a demo of the system you can use the sample dataset included in `data/samples/` and then run the backend and frontend as described above. Once both servers are running you can interact with the dashboard to view access logs, watch alerts trigger when unknown faces are sent to `/api/recognize`, and check the health endpoint.
 
 ### Registering Faces
 

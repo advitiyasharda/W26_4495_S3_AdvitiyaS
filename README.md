@@ -174,34 +174,7 @@ Both must match, otherwise the frontend will not be able to reach the backend.
 
 ---
 
-## API Endpoints
 
-The backend exposes the following REST endpoints. All are prefixed with `/api`.
-
-| Method | Endpoint | Description |
-|---|---|---|
-| GET | `/health` | Check if the server is running |
-| POST | `/recognize` | Submit a base64 image frame for face recognition |
-| GET | `/logs` | Retrieve access logs (supports `limit` and `offset` query params) |
-| GET | `/threats` | Retrieve active security alerts |
-| GET | `/stats` | System statistics (total events, active threats, registered users) |
-| GET | `/users` | List registered users |
-| DELETE | `/users/<id>` | Remove a registered user |
-| GET | `/compliance/audit` | Full system audit log |
-
-Example — check the server is up:
-
-```bash
-curl http://localhost:5001/api/health
-```
-
-Example — get the 10 most recent access logs:
-
-```bash
-curl "http://localhost:5001/api/logs?limit=10"
-```
-
----
 
 ## Project Structure
 
@@ -267,32 +240,6 @@ project-root/
 |
 `-- dashboard/                     # Original HTML/CSS prototype (kept for reference)
 ```
-
----
-
-## Troubleshooting
-
-**The dashboard shows "Demo data" even though I registered faces**  
-Make sure the backend is running before opening the dashboard. The frontend falls back to demo data when it cannot reach `localhost:5001`.
-
-**Recognition is not working or always returns "Unknown"**  
-Run the diagnostics script from the project root:
-
-```bash
-python3 scripts/diagnose_recognition.py
-```
-
-This checks whether the camera is accessible, whether sample photos were loaded correctly, whether samples from different people are visually distinct enough, and whether the database is reachable.
-
-**Backend fails to start with "Address already in use"**  
-Another process is using port 5001. Either stop that process or change the port as described in the Port Configuration section above.
-
-**"Module not found" errors when starting the backend**  
-Make sure you ran `pip install -r requirements.txt` from the project root and that you are using the same Python environment where you installed the packages.
-
-**Frontend fails with "npm: command not found"**  
-Node.js is not installed or is not on your PATH. Download it from https://nodejs.org and restart your terminal after installing.
-
 ---
 
 ## Compliance Notes

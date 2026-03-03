@@ -13,7 +13,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 from data.database import Database
 from api.facial_recognition import FacialRecognitionEngine
-import numpy as np
 import cv2
 
 class FaceRegistration:
@@ -25,7 +24,10 @@ class FaceRegistration:
     
     def register_person(self, person_id, name, role='resident'):
         """
-        Register a person in the system
+        Register a person in the system.
+        Looks for captured photos in data/samples/{name}/ to extract real
+        face encodings. If no photos are found, adds to the DB only and
+        reminds the user to capture photos first.
         
         Args:
             person_id: Unique identifier (e.g., 'resident_001')
@@ -44,11 +46,42 @@ class FaceRegistration:
             
             print(f"  ✓ Added to database: {person_id}")
             
-            # Register in facial recognition engine
-            # Using dummy encoding for now (would be real face encoding in production)
-            dummy_encoding = np.random.rand(128)  # 128-dim face vector
-            self.engine.register_face(person_id, name, dummy_encoding)
-            print(f"  ✓ Registered in facial recognition engine")
+            # Try to extract real face encodings from data/samples/{name}/
+            # Use the folder name derived from the display name (spaces → underscores, lower)
+            folder_name = name.replace(' ', '_').lower()
+            photo_dir = Path(f'data/samples/{folder_name}')
+            
+            # Also try exact name as typed in case the folder matches it directly
+            if not photo_dir.exists():
+                photo_dir = Path(f'data/samples/{name}')
+            
+            if photo_dir.exists():
+                photos = list(photo_dir.glob('*.jpg')) + list(photo_dir.glob('*.png'))
+                encodings_registered = 0
+                
+                for photo_path in photos:
+                    frame = cv2.imread(str(photo_path))
+                    if frame is None:
+                        continue
+                    faces = self.engine.detect_faces(frame)
+                    if len(faces) == 0:
+                        continue
+                    x, y, w, h = faces[0]
+                    face_roi = frame[y:y+h, x:x+w]
+                    encoding = self.engine._extract_face_features(face_roi)
+                    if encoding is not None:
+                        self.engine.register_face(person_id, name, encoding)
+                        encodings_registered += 1
+                
+                if encodings_registered > 0:
+                    print(f"  ✓ Registered {encodings_registered} face encoding(s) from {photo_dir}/")
+                else:
+                    print(f"  ⚠ Found photo folder but could not extract any face encodings.")
+                    print(f"     Check photo quality, or recapture with: python scripts/capture_faces.py")
+            else:
+                print(f"  ⚠ No photo folder found at data/samples/{folder_name}/")
+                print(f"     Person added to DB only. Capture photos first, then use Option 2")
+                print(f"     to register face encodings: python scripts/capture_faces.py")
             
             return True
         except Exception as e:

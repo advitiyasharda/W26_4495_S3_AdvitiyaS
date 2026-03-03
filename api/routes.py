@@ -118,6 +118,47 @@ def recognize_face():
                 result="success",
                 details=f"confidence={conf:.2f}",
             )
+
+            # --- Anomaly Detection ---
+            # Score this access event through the Isolation Forest model.
+            # If flagged as anomalous, log it to the anomalies table and
+            # raise a threat alert so caregivers are notified on the dashboard.
+            try:
+                anomaly_event = {
+                    "timestamp": result["timestamp"],
+                    "person_id": db_user_id,
+                    "access_type": "entry",
+                    "confidence": float(conf),
+                }
+                anomaly_detector = current_app.anomaly_detector
+                anomaly_result = anomaly_detector.predict_anomaly(anomaly_event)
+                result["anomaly_score"] = anomaly_result.get("anomaly_score", 0.0)
+                result["is_anomaly"] = anomaly_result.get("is_anomaly", False)
+
+                if anomaly_result.get("is_anomaly"):
+                    score = anomaly_result.get("anomaly_score", 0.0)
+                    db.log_anomaly(
+                        db_user_id,
+                        "BEHAVIOURAL_ANOMALY",
+                        score,
+                        f"Isolation Forest flagged unusual access pattern (score={score:.3f})",
+                    )
+                    db.log_threat(
+                        threat_type="Behavioural Anomaly Detected",
+                        severity="MEDIUM",
+                        user_id=db_user_id,
+                        message=(
+                            f"Unusual access pattern detected for {result['name']}. "
+                            f"Anomaly score: {score:.3f}."
+                        ),
+                    )
+                    logger.warning(
+                        "Anomaly flagged for %s — score=%.3f", result["name"], score
+                    )
+            except Exception as e:
+                logger.warning("Anomaly detection skipped: %s", e)
+            # --- End Anomaly Detection ---
+
         else:
             # Face detected but not recognized or below threshold
             unknown_id = result["name"] or "Unknown"

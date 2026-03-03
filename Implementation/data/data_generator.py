@@ -27,7 +27,7 @@ class SyntheticDataGenerator:
     def generate_dataset(self, output_path: str = 'data/synthetic_dataset.csv',
                         num_residents: int = 3,
                         num_caregivers: int = 2,
-                        num_days: int = 30,
+                        num_days: int = 60,
                         anomaly_rate: float = 0.15) -> str:
         """
         Generate synthetic door access dataset.
@@ -82,34 +82,43 @@ class SyntheticDataGenerator:
                 'wandering',      # Excessive entries/exits
                 'inactivity',     # No movement for extended period
                 'unusual_time',   # Late night activity
-                'frequency_spike' # Unusual access pattern
+                'frequency_spike',# Unusual access pattern
+                'failed_access',  # Repeated low-confidence / failed attempts
             ])
-            
+
             if anomaly_type == 'wandering':
-                # Multiple entries/exits in short time
                 for _ in range(random.randint(5, 12)):
                     time = date + timedelta(hours=random.randint(8, 18), minutes=random.randint(0, 59))
                     access_type = random.choice(['entry', 'exit'])
                     events.append(self._create_event(resident_id, access_type, time, is_normal=False))
-            
+
             elif anomaly_type == 'inactivity':
-                # Only one entry early in day, no exits
+                # Only one entry early in the day — no further movement
                 time = date + timedelta(hours=7, minutes=random.randint(0, 59))
                 events.append(self._create_event(resident_id, 'entry', time, is_normal=False))
-            
+
             elif anomaly_type == 'unusual_time':
-                # Activity during unusual hours (2-5 AM)
+                # Activity during unusual hours (2–5 AM)
                 time = date + timedelta(hours=random.randint(2, 5), minutes=random.randint(0, 59))
                 access_type = random.choice(['entry', 'exit'])
                 events.append(self._create_event(resident_id, access_type, time, is_normal=False))
-            
+
             elif anomaly_type == 'frequency_spike':
-                # More accesses than normal
                 num_accesses = random.randint(8, 15)
                 for _ in range(num_accesses):
                     time = date + timedelta(hours=random.randint(6, 22), minutes=random.randint(0, 59))
                     access_type = random.choice(['entry', 'exit'])
                     events.append(self._create_event(resident_id, access_type, time, is_normal=False))
+
+            elif anomaly_type == 'failed_access':
+                # Multiple low-confidence attempts in a short window — possible
+                # unrecognised person or spoofing attempt
+                base_time = date + timedelta(hours=random.randint(10, 22))
+                for attempt in range(random.randint(3, 6)):
+                    time = base_time + timedelta(minutes=attempt * random.randint(1, 4))
+                    events.append(self._create_event(
+                        resident_id, 'entry', time, is_normal=False, failed=True
+                    ))
         
         else:
             # Normal resident day pattern
@@ -153,13 +162,25 @@ class SyntheticDataGenerator:
         return events
     
     def _create_event(self, person_id: str, access_type: str, timestamp: datetime,
-                     is_normal: bool = True, role: str = 'resident') -> Dict:
-        """Create a single access event"""
+                     is_normal: bool = True, role: str = 'resident',
+                     failed: bool = False) -> Dict:
+        """Create a single access event.
+
+        failed=True generates a very low confidence score (0.3-0.55) to
+        simulate a failed or suspicious access attempt.
+        """
+        if failed:
+            confidence = random.uniform(0.30, 0.55)
+        elif is_normal:
+            confidence = random.uniform(0.85, 0.99)
+        else:
+            confidence = random.uniform(0.55, 0.84)
+
         return {
             'timestamp': timestamp.isoformat(),
             'person_id': person_id,
             'access_type': access_type,
-            'confidence': random.uniform(0.85, 0.99) if is_normal else random.uniform(0.5, 0.85),
+            'confidence': round(confidence, 4),
             'is_normal': 'yes' if is_normal else 'no',
             'role': role,
             'device_id': 'door_001'
@@ -202,6 +223,6 @@ def generate_default_dataset(output_path: str = 'data/synthetic_dataset.csv',
         output_path=output_path,
         num_residents=num_residents,
         num_caregivers=num_caregivers,
-        num_days=30,
+        num_days=60,
         anomaly_rate=0.15
     )

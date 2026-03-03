@@ -158,8 +158,7 @@ def register_captured_person(person_name):
     """Register the captured person in the system"""
     from data.database import Database
     from api.facial_recognition import FacialRecognitionEngine
-    import numpy as np
-    
+
     print("\n" + "=" * 60)
     print("REGISTERING IN SYSTEM")
     print("=" * 60)
@@ -184,10 +183,31 @@ def register_captured_person(person_name):
         
         print(f"  ✓ Added to database")
         
-        # Register face (dummy encoding for now)
-        dummy_encoding = np.random.rand(128)
-        engine.register_face(person_id, person_name, dummy_encoding)
-        print(f"  ✓ Face registered in engine")
+        # Extract real face encodings from captured photos
+        photo_dir = Path(f'data/samples/{person_name}')
+        photos = list(photo_dir.glob('*.jpg')) + list(photo_dir.glob('*.png'))
+        encodings_registered = 0
+        
+        for photo_path in photos:
+            frame = cv2.imread(str(photo_path))
+            if frame is None:
+                continue
+            faces = engine.detect_faces(frame)
+            if len(faces) == 0:
+                continue
+            x, y, w, h = faces[0]
+            face_roi = frame[y:y+h, x:x+w]
+            encoding = engine._extract_face_features(face_roi)
+            if encoding is not None:
+                engine.register_face(person_id, person_name, encoding)
+                encodings_registered += 1
+        
+        if encodings_registered == 0:
+            print(f"  ✗ Could not extract face encodings from photos in {photo_dir}")
+            print(f"     Check photo quality and try recapturing.")
+            return
+        
+        print(f"  ✓ Registered {encodings_registered} face encoding(s) in engine")
         
         print("\n" + "=" * 60)
         print("✓ REGISTRATION COMPLETE")
@@ -195,7 +215,7 @@ def register_captured_person(person_name):
         print(f"  Person ID: {person_id}")
         print(f"  Name: {person_name.replace('_', ' ').title()}")
         print(f"  Role: {role}")
-        print(f"  Photos: {len([f for f in os.listdir(f'data/samples/{person_name}') if f.endswith(('.jpg', '.jpeg', '.png'))])}")
+        print(f"  Encodings: {encodings_registered}/{len(photos)} photos")
         
     except Exception as e:
         print(f"ERROR during registration: {e}")

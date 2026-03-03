@@ -59,6 +59,16 @@ def create_app(config_name="config"):
     if n > 0:
         logger.info("Loaded %d face encodings from data/samples/", n)
 
+    # Load anomaly detection model
+    from models.anomaly_detection import AnomalyDetector
+    app.anomaly_detector = AnomalyDetector()
+    model_path = Path("models/isolation_forest.pkl")
+    if model_path.exists():
+        app.anomaly_detector.load_model(str(model_path))
+        logger.info("Anomaly detection model loaded from %s", model_path)
+    else:
+        logger.warning("No trained anomaly model found at %s — run scripts/train_anomaly_detection.py", model_path)
+
     # Register blueprints
     from api.routes import api_bp
     app.register_blueprint(api_bp, url_prefix="/api")

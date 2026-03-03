@@ -15,10 +15,11 @@ class AnomalyDetector:
     Designed for edge deployment on Raspberry Pi/Jetson.
     """
     
-    def __init__(self, model_type='isolation_forest', contamination=0.1):
+    def __init__(self, model_type='isolation_forest', contamination=0.15):
         """
         Initialize anomaly detector.
-        
+        contamination=0.15 matches the 15% anomaly rate in the synthetic dataset.
+
         Args:
             model_type: 'isolation_forest' or 'lstm_autoencoder'
             contamination: Expected proportion of anomalies in dataset
@@ -33,81 +34,93 @@ class AnomalyDetector:
     
     def extract_features(self, access_sequence: List[Dict]) -> np.ndarray:
         """
-        Extract statistical features from access sequence.
-        
-        Features:
-        - Time between accesses
-        - Access frequency (per hour/day)
-        - Day of week
-        - Hour of day
-        - Access type (entry/exit)
-        
+        Extract features from access sequence using cyclical encoding for
+        time-based fields so that the model understands hour and day wrap
+        around (e.g. 23:00 is close to 00:00, not far away).
+
+        Features (7 total):
+        - hour_sin, hour_cos   : cyclical encoding of hour (0-23)
+        - day_sin,  day_cos    : cyclical encoding of day-of-week (0-6)
+        - access_type          : 1=entry, 0=exit
+        - confidence           : recognition confidence score
+        - time_delta           : hours since previous access event
+
         Args:
             access_sequence: List of access events with timestamps
-            
+
         Returns:
-            Feature matrix (n_events, n_features)
+            Feature matrix (n_events, 7)
         """
         features = []
-        
+
         for i, access in enumerate(access_sequence):
             timestamp = datetime.fromisoformat(access['timestamp'])
-            
-            # Time-based features
+
             hour = timestamp.hour
             day_of_week = timestamp.weekday()
-            
-            # Access pattern features (handle both 'type' and 'access_type' keys)
+
+            # Cyclical encoding — maps time onto a unit circle so the model
+            # understands that 23:00 and 00:00 are 1 hour apart, not 23 apart
+            hour_sin = np.sin(2 * np.pi * hour / 24)
+            hour_cos = np.cos(2 * np.pi * hour / 24)
+            day_sin  = np.sin(2 * np.pi * day_of_week / 7)
+            day_cos  = np.cos(2 * np.pi * day_of_week / 7)
+
             access_type_key = 'access_type' if 'access_type' in access else 'type'
             access_type = 1 if access[access_type_key] == 'entry' else 0
-            confidence = access.get('confidence', 0.0)
-            
-            # Time interval from previous access
+            confidence = float(access.get('confidence', 0.0))
+
             if i > 0:
                 prev_timestamp = datetime.fromisoformat(access_sequence[i-1]['timestamp'])
-                time_diff = (timestamp - prev_timestamp).total_seconds() / 3600  # hours
+                time_diff = (timestamp - prev_timestamp).total_seconds() / 3600
             else:
                 time_diff = 0.0
-            
-            feature_vector = [
-                hour,
-                day_of_week,
+
+            features.append([
+                hour_sin, hour_cos,
+                day_sin,  day_cos,
                 access_type,
                 confidence,
-                time_diff
-            ]
-            
-            features.append(feature_vector)
-        
+                time_diff,
+            ])
+
         return np.array(features)
     
     def train_isolation_forest(self, training_data: np.ndarray) -> bool:
         """
-        Train Isolation Forest model.
-        
+        Train Isolation Forest model with StandardScaler normalisation.
+        Scaling ensures all 7 features contribute equally regardless of
+        their raw numeric range (e.g. time_delta can be hundreds of hours
+        while confidence is 0-1).
+
         Args:
             training_data: Feature matrix (n_samples, n_features)
-            
+
         Returns:
             True if training successful
         """
         try:
-            # Import here to avoid dependency if not using this model
             from sklearn.ensemble import IsolationForest
-            
+            from sklearn.preprocessing import StandardScaler
+
+            # Fit scaler on training data and transform
+            self.feature_scaler = StandardScaler()
+            scaled_data = self.feature_scaler.fit_transform(training_data)
+
             self.model = IsolationForest(
                 contamination=self.contamination,
                 n_estimators=100,
                 random_state=42,
                 n_jobs=-1
             )
-            
-            self.model.fit(training_data)
+
+            self.model.fit(scaled_data)
             self.is_trained = True
-            
-            logger.info(f"Isolation Forest trained on {len(training_data)} samples")
+
+            logger.info(f"Isolation Forest trained on {len(training_data)} samples "
+                        f"(contamination={self.contamination}, scaled=True)")
             return True
-            
+
         except ImportError:
             logger.error("scikit-learn not installed. Install with: pip install scikit-learn")
             return False
@@ -155,30 +168,32 @@ class AnomalyDetector:
             }
         
         try:
-            # Extract features for single event
             features = self.extract_features([access_event])
-            
-            # Get anomaly score (-1 for anomaly, 1 for normal)
+
+            # Apply the same scaler used during training
+            if self.feature_scaler is not None:
+                features = self.feature_scaler.transform(features)
+
             prediction = self.model.predict(features)[0]
             score = self.model.score_samples(features)[0]
-            
-            # Normalize score to 0-1 range
-            normalized_score = 1 / (1 + np.exp(score))  # Sigmoid normalization
-            
+
+            # Sigmoid normalisation → 0-1 range (higher = more anomalous)
+            normalized_score = 1 / (1 + np.exp(score))
+
             is_anomaly = prediction == -1
-            
+
             result = {
-                'is_anomaly': is_anomaly,
+                'is_anomaly': bool(is_anomaly),
                 'anomaly_score': float(normalized_score),
                 'confidence': float(abs(score)),
                 'timestamp': datetime.now().isoformat()
             }
-            
+
             if is_anomaly:
-                logger.warning(f"Anomaly detected: {result}")
-            
+                logger.warning(f"Anomaly detected: score={normalized_score:.3f}")
+
             return result
-            
+
         except Exception as e:
             logger.error(f"Error in anomaly prediction: {e}")
             return {
@@ -213,23 +228,31 @@ class AnomalyDetector:
         }
     
     def save_model(self, filepath: str) -> bool:
-        """Save trained model to disk"""
+        """Save trained model and scaler to disk as a single bundle."""
         try:
             import pickle
+            bundle = {'model': self.model, 'scaler': self.feature_scaler}
             with open(filepath, 'wb') as f:
-                pickle.dump(self.model, f)
-            logger.info(f"Model saved to {filepath}")
+                pickle.dump(bundle, f)
+            logger.info(f"Model + scaler saved to {filepath}")
             return True
         except Exception as e:
             logger.error(f"Error saving model: {e}")
             return False
-    
+
     def load_model(self, filepath: str) -> bool:
-        """Load trained model from disk"""
+        """Load trained model and scaler from disk."""
         try:
             import pickle
             with open(filepath, 'rb') as f:
-                self.model = pickle.load(f)
+                bundle = pickle.load(f)
+            # Support both old format (bare model) and new bundle format
+            if isinstance(bundle, dict):
+                self.model = bundle['model']
+                self.feature_scaler = bundle.get('scaler')
+            else:
+                self.model = bundle
+                self.feature_scaler = None
             self.is_trained = True
             logger.info(f"Model loaded from {filepath}")
             return True

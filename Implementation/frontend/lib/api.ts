@@ -1,4 +1,4 @@
-// API client — all calls go through Next.js /api proxy → Flask :5001
+// API client — all calls go through Next.js /api proxy → Flask :5000
 
 export const API_BASE = "/api";
 

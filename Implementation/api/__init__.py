@@ -69,6 +69,11 @@ def create_app(config_name="config"):
     else:
         logger.warning("No trained anomaly model found at %s — run scripts/train_anomaly_detection.py", model_path)
 
+    # Initialise threat detector (rules-based)
+    from api.threat_detection import ThreatDetector
+    app.threat_detector = ThreatDetector()
+    logger.info("ThreatDetector initialised")
+
     # Initialise fall detector (stateful — one instance per server process)
     from models.fall_detection import FallDetector
     try:

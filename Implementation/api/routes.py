@@ -111,6 +111,42 @@ def recognize_face():
                 confidence=float(conf),
                 status="success",
             )
+
+            # --- Threat Detection ---
+            try:
+                threat_detector = current_app.threat_detector
+                access_type_val = "entry"  # all /recognize calls are entries
+                # Wandering check (only meaningful for exits — kept here for future exit endpoint)
+                wandering = threat_detector.check_wandering(db_user_id, access_type_val)
+                if wandering:
+                    db.log_threat(
+                        wandering["threat_type"],
+                        wandering["severity"],
+                        user_id=db_user_id,
+                        message=wandering["message"],
+                    )
+                # Tailgating check
+                tailgating = threat_detector.check_tailgating(db_user_id, db)
+                if tailgating:
+                    db.log_threat(
+                        tailgating["threat_type"],
+                        tailgating["severity"],
+                        user_id=db_user_id,
+                        message=tailgating["message"],
+                    )
+                # Unusual time check (already exists, just needs calling)
+                unusual = threat_detector.check_unusual_access_time(db_user_id)
+                if unusual:
+                    db.log_threat(
+                        unusual["threat_type"],
+                        unusual["severity"],
+                        user_id=db_user_id,
+                        message=unusual["message"],
+                    )
+            except Exception as e:
+                logger.warning("Threat detection skipped: %s", e)
+            # --- End Threat Detection ---
+
             db.log_audit(
                 "ACCESS_GRANTED",
                 user_id=db_user_id,

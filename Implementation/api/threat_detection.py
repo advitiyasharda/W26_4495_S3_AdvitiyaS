@@ -3,7 +3,7 @@ Threat Detection Module for Cybersecurity
 Detects anomalous access patterns and security threats
 """
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional, List, Dict
 from enum import Enum
 
@@ -172,6 +172,103 @@ class ThreatDetector:
             logger.warning(alert['message'])
             return alert
         
+        return None
+
+    def check_wandering(self, person_id: str, access_type: str) -> Optional[Dict]:
+        """
+        Detect wandering risk for an elderly care setting.
+
+        Triggers when a known resident performs an exit between 9 PM and 6 AM.
+
+        Args:
+            person_id: Identifier for resident
+            access_type: "entry" or "exit"
+
+        Returns:
+            Threat dict if wandering detected, None otherwise
+        """
+        if access_type != "exit":
+            return None
+
+        now = datetime.now()
+        wandering_hours = {21, 22, 23, 0, 1, 2, 3, 4, 5}
+        if now.hour not in wandering_hours:
+            return None
+
+        alert = {
+            "threat_type": "WANDERING_DETECTED",
+            "severity": ThreatLevel.HIGH.name,
+            "person_id": person_id,
+            "access_hour": now.hour,
+            "timestamp": now.isoformat(),
+            "message": (
+                f"Resident {person_id} exited at unusual hour: "
+                f"{now.strftime('%H:%M')} — possible wandering"
+            ),
+        }
+        logger.warning(alert["message"])
+        return alert
+
+    def check_tailgating(self, current_person_id: str, db) -> Optional[Dict]:
+        """
+        Detect tailgating based on rapid successive entries.
+
+        Since the camera recognizes one face per event, multiple different people
+        entering within 15 seconds suggests possible tailgating.
+
+        Args:
+            current_person_id: Person associated with the current recognition event
+            db: Database instance providing get_access_logs(limit=...)
+
+        Returns:
+            Threat dict if tailgating detected, None otherwise
+        """
+        now = datetime.now()
+        cutoff_utc = datetime.utcnow() - timedelta(seconds=15)
+
+        logs = db.get_access_logs(limit=20)
+        recent_users = set()
+
+        for row in logs or []:
+            if row.get("type") != "entry" or row.get("status") != "success":
+                continue
+
+            ts_raw = row.get("timestamp")
+            if not ts_raw:
+                continue
+
+            try:
+                ts = datetime.fromisoformat(ts_raw)
+            except Exception:
+                try:
+                    if isinstance(ts_raw, str) and ts_raw.endswith("Z"):
+                        ts = datetime.fromisoformat(ts_raw[:-1] + "+00:00")
+                    else:
+                        continue
+                except Exception:
+                    continue
+
+            if ts.tzinfo is not None:
+                ts = ts.astimezone(timezone.utc).replace(tzinfo=None)
+
+            if ts < cutoff_utc:
+                continue
+
+            user_val = row.get("user_id") or row.get("person_id")
+            if user_val:
+                recent_users.add(str(user_val))
+
+        if len(recent_users) >= 2:
+            alert = {
+                "threat_type": "TAILGATING_DETECTED",
+                "severity": ThreatLevel.HIGH.name,
+                "person_id": current_person_id,
+                "timestamp": now.isoformat(),
+                "message": "Multiple people entered within 15 seconds — possible tailgating",
+            }
+            logger.warning(alert["message"])
+            return alert
+
         return None
     
     def log_access_attempt(self, person_id: str, success: bool):

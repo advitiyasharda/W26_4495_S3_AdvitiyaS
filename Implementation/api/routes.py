@@ -320,8 +320,18 @@ def get_access_logs():
 def get_statistics():
     """Get system statistics and analytics"""
     try:
-        db_stats = get_db().get_database_stats()
-        
+        db = get_db()
+        db_stats = db.get_database_stats()
+
+        fall_count_today = 0
+        try:
+            from datetime import date
+            rows = db.get_anomalies(limit=200, anomaly_type="fall_detected")
+            today_str = date.today().isoformat()
+            fall_count_today = sum(1 for r in rows if str(r.get("timestamp", "")).startswith(today_str))
+        except Exception:
+            pass
+
         stats = {
             'facial_recognition': {
                 'total_persons': db_stats.get('total_users', 0),
@@ -335,6 +345,9 @@ def get_statistics():
             'threats': {
                 'active_alerts': db_stats.get('active_threats', 0),
                 'total_threats': 0
+            },
+            'falls': {
+                'today': fall_count_today
             },
             'system': {
                 'uptime_hours': 0,

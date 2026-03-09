@@ -27,6 +27,9 @@ export interface StatsResponse {
   threats: {
     active_alerts: number;
   };
+  falls?: {
+    today: number;
+  };
 }
 
 export interface AccessLog {
@@ -107,3 +110,31 @@ export const getThreats = (severity?: string) => {
 
 export const getAuditLog = (limit = 50) =>
   fetchAPI<AuditResponse>(`/compliance/audit?limit=${limit}`);
+
+// ─── Fall Detection ──────────────────────────────────────────────────────────
+
+export interface FallEvent {
+  anomaly_id: number;
+  user_id: string;
+  anomaly_type: string;
+  anomaly_score: number;
+  description: string;
+  timestamp: string;
+}
+export interface FallEventsResponse {
+  events: FallEvent[];
+  count: number;
+}
+export interface FallStatusResponse {
+  detector_ready: boolean;
+  fall_threshold: number;
+  velocity_window: number;
+  cooldown_frames: number;
+  history_length: number;
+}
+export const getFallEvents = (limit = 20) =>
+  fetchAPI<FallEventsResponse>(`/fall/events?limit=${limit}`);
+export const getFallStatus = () =>
+  fetchAPI<FallStatusResponse>("/fall/status");
+export const resetFallDetector = () =>
+  fetchAPI<{ status: string }>("/fall/reset", { method: "POST" });

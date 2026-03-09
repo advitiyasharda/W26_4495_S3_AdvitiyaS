@@ -2,12 +2,15 @@
 Fall Detection — Live Camera Script (Phase 1: Rules-Based)
 
 Run this script to start real-time fall detection using your webcam.
+Falls are detected for ANY person in view — registered or unknown.
 
 Usage:
-    python3 scripts/fall_detection_camera.py
-    python3 scripts/fall_detection_camera.py --camera 1       # use camera index 1
-    python3 scripts/fall_detection_camera.py --no-display     # headless, logs only
-    python3 scripts/fall_detection_camera.py --log falls.csv  # save fall events
+    python scripts/fall_detection_camera.py
+    python scripts/fall_detection_camera.py --camera 1          # use camera index 1
+    python scripts/fall_detection_camera.py --no-display        # headless, logs only
+    python scripts/fall_detection_camera.py --log falls.csv     # save fall events to CSV
+    python scripts/fall_detection_camera.py --no-api            # skip dashboard logging
+    python scripts/fall_detection_camera.py --api-url http://localhost:5001
 
 Controls (when window is open):
     Q  — quit
@@ -15,14 +18,15 @@ Controls (when window is open):
     R  — reset fall history / cooldown
 
 What it does:
-    Opens your webcam, runs MediaPipe Pose on every frame, then applies
-    three rules (hip height, torso angle, drop velocity) to decide if a
-    fall happened.  When a fall is detected:
-      - A red "FALL DETECTED" banner appears on screen
-      - The event is printed to the terminal
-      - If --log is used, a CSV row is appended
+    Opens your webcam, runs MediaPipe Pose on every frame, applies
+    three rules (hip height, torso angle, drop velocity) to detect falls.
+    Works for ANY person — no face recognition required.
 
-No dashboard connection — alerts stay local.
+    When a fall is detected:
+      - A red "FALL DETECTED" banner appears on screen
+      - The event is logged in the terminal
+      - The fall metadata is POSTed to /api/fall/log on the Flask server
+        so it immediately appears on the dashboard
 """
 
 import sys
@@ -31,8 +35,15 @@ import time
 import argparse
 import logging
 import csv
+import threading
 from datetime import datetime
 from pathlib import Path
+
+try:
+    import requests as _requests
+    _HAS_REQUESTS = True
+except ImportError:
+    _HAS_REQUESTS = False
 
 # Make sure the Implementation root is on the path regardless of where
 # the script is launched from
@@ -67,10 +78,60 @@ def parse_args():
         "--threshold", type=float, default=0.55,
         help="Fall confidence threshold 0–1 (default: 0.55)"
     )
+    parser.add_argument(
+        "--no-api", action="store_true",
+        help="Disable posting falls to the Flask dashboard API"
+    )
+    parser.add_argument(
+        "--api-url", type=str, default="http://localhost:5001",
+        help="Base URL of the Flask server (default: http://localhost:5001)"
+    )
     return parser.parse_args()
 
 
-def init_csv_log(filepath: str) -> csv.writer:
+def post_fall_to_api(result, api_url: str) -> None:
+    """Fire-and-forget: POST already-detected fall metadata to /api/fall/log.
+
+    Uses /api/fall/log (not /api/fall/detect) so Flask logs the result
+    directly — no re-detection needed. Flask's FallDetector would have no
+    velocity history and could miss the fall from a single cold frame.
+
+    Works for ANY person — registered or unknown — pose-based detection only.
+    """
+    if not _HAS_REQUESTS:
+        logger.warning(
+            "'requests' not installed — cannot post to dashboard. "
+            "Run: pip install requests"
+        )
+        return
+
+    def _post():
+        try:
+            resp = _requests.post(
+                f"{api_url}/api/fall/log",
+                json={
+                    "confidence":      result.confidence,
+                    "reason":          result.reason,
+                    "hip_height":      result.hip_height,
+                    "torso_angle_deg": result.torso_angle_deg,
+                    "hip_velocity":    result.hip_velocity,
+                },
+                timeout=5,
+            )
+            if resp.ok:
+                logger.info("Fall logged to dashboard (status %d)", resp.status_code)
+            else:
+                logger.warning(
+                    "Dashboard POST returned %d: %s",
+                    resp.status_code, resp.text[:200]
+                )
+        except Exception as exc:
+            logger.warning("Could not post fall to dashboard: %s", exc)
+
+    threading.Thread(target=_post, daemon=True).start()
+
+
+def init_csv_log(filepath: str):
     """Create or append to a CSV log file; write header if new."""
     path = Path(filepath)
     write_header = not path.exists()
@@ -122,6 +183,11 @@ def run(args):
     if not args.no_display:
         logger.info("Press Q to quit | S to screenshot | R to reset")
 
+    if not args.no_api:
+        logger.info("Dashboard logging enabled — falls will POST to %s/api/fall/log", args.api_url)
+    else:
+        logger.info("Dashboard logging disabled (--no-api)")
+
     # CSV log setup
     csv_writer = None
     csv_file   = None
@@ -132,13 +198,13 @@ def run(args):
     screenshots_dir = PROJECT_DIR / "screenshots"
     screenshots_dir.mkdir(exist_ok=True)
 
-    # ── Stats counters ────────────────────────────────────────────────────
+    # ── Stats counters ─────────────────────────────────────────────────────
     frame_count  = 0
     fall_count   = 0
     start_time   = time.time()
     last_fall_ts = None
 
-    # ── Main loop ─────────────────────────────────────────────────────────
+    # ── Main loop ──────────────────────────────────────────────────────────
     try:
         while True:
             ret, frame = cap.read()
@@ -150,7 +216,7 @@ def run(args):
             frame_count += 1
             result = detector.process_frame(frame)
 
-            # ── Handle fall event ─────────────────────────────────────────
+            # ── Handle fall event ──────────────────────────────────────────
             if result and result.is_fall:
                 fall_count += 1
                 last_fall_ts = datetime.now()
@@ -160,11 +226,15 @@ def run(args):
                     result.torso_angle_deg, result.hip_velocity,
                     result.reason,
                 )
+                # Post to Flask API → logged to DB → visible on dashboard
+                # Works for ANY person (unknown or registered) — pose-based only
+                if not args.no_api:
+                    post_fall_to_api(result, args.api_url)
                 if csv_writer:
                     log_fall_event(csv_writer, result)
                     csv_file.flush()
 
-            # ── Draw overlay ──────────────────────────────────────────────
+            # ── Draw overlay ───────────────────────────────────────────────
             if not args.no_display:
                 annotated = detector.draw_overlay(frame, result) if result else frame
 

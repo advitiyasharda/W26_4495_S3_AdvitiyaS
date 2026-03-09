@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback } from "react";
-import { getStats, getAccessLogs, StatsResponse, AccessLog } from "@/lib/api";
+import { getStats, getAccessLogs, getFallEvents, StatsResponse, AccessLog } from "@/lib/api";
 import { DEMO_LOGS } from "@/lib/demoData";
 import StatCard from "@/components/StatCard";
 import AccessLogsTable from "@/components/AccessLogsTable";
@@ -38,10 +38,17 @@ const RefreshIcon = () => (
     <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15" />
   </svg>
 );
+const FallIcon = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4 text-red-500">
+    <path d="M12 2v8l4-4" /><path d="M12 10l-4 4" />
+    <circle cx="12" cy="18" r="2" /><path d="M12 14v4" />
+  </svg>
+);
 
 export default function DashboardPage() {
   const [stats, setStats]     = useState<StatsResponse | null>(null);
   const [logs, setLogs]       = useState<AccessLog[]>([]);
+  const [fallCount, setFallCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [usingDemo, setUsingDemo] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
@@ -49,7 +56,7 @@ export default function DashboardPage() {
 
   const refresh = useCallback(async () => {
     setLoading(true);
-    const [s, l] = await Promise.all([getStats(), getAccessLogs(50)]);
+    const [s, l, fallData] = await Promise.all([getStats(), getAccessLogs(50), getFallEvents(50)]);
 
     const hasRealPeople = l?.logs.some((log) => log.person_id != null && log.name != null);
 
@@ -69,6 +76,10 @@ export default function DashboardPage() {
       const exits   = DEMO_LOGS.filter((x) => x.type === "exit").length;
       setStats({ access_events: { total_entries: entries, total_exits: exits, today: DEMO_LOGS.length }, threats: { active_alerts: 3 } });
     }
+
+    const todayStr = new Date().toDateString();
+    const todayFalls = fallData?.events?.filter((e) => new Date(e.timestamp).toDateString() === todayStr).length ?? 0;
+    setFallCount(todayFalls);
 
     setLoading(false);
     setLastRefresh(new Date());
@@ -111,7 +122,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Stat cards */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
         <StatCard
           title="Total Entries Today"
           value={stats?.access_events.total_entries ?? "—"}
@@ -132,6 +143,19 @@ export default function DashboardPage() {
           sub="Critical / High severity"
           icon={<AlertIcon />}
           trend={{ value: stats?.threats.active_alerts && stats.threats.active_alerts > 0 ? 1 : 0 }}
+        />
+        <StatCard
+          title="Falls Detected Today"
+          value={
+            <span className="flex items-center gap-2">
+              {fallCount}
+              {fallCount > 0 && (
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+              )}
+            </span>
+          }
+          sub="Fall detection alerts"
+          icon={<FallIcon />}
         />
         <StatCard
           title="System Status"

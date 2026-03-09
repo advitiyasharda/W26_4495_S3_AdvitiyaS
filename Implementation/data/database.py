@@ -340,9 +340,20 @@ class Database:
     
     def log_anomaly(self, user_id: str, anomaly_type: str, 
                    anomaly_score: float, description: str = '') -> bool:
-        """Log detected anomaly"""
+        """Log detected anomaly.
+
+        Works for ANY person in frame — registered or unknown.
+        If user_id does not exist in the users table, a system placeholder
+        is created automatically so the FK constraint is never violated.
+        """
         try:
             cursor = self.conn.cursor()
+            # Guarantee the user row exists so the FK never silently drops the row.
+            # INSERT OR IGNORE is a no-op if user_id already exists.
+            cursor.execute(
+                "INSERT OR IGNORE INTO users (user_id, name, role) VALUES (?, ?, ?)",
+                (user_id, user_id.replace("_", " ").title(), "system"),
+            )
             cursor.execute('''
                 INSERT INTO anomalies (user_id, anomaly_type, anomaly_score, description)
                 VALUES (?, ?, ?, ?)

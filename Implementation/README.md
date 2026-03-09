@@ -54,6 +54,7 @@ FaceDoor provides:
 │  Falls      /falls          │        │  /api/stats                      │
 │  Audit      /compliance     │        │  /api/compliance/audit           │
 └─────────────────────────────┘        │  /api/fall/detect                │
+                                       │  /api/fall/log  (new)            │
                                        │  /api/fall/events                │
                                        │  /api/fall/status                │
                                        └──────────────┬───────────────────┘
@@ -249,22 +250,34 @@ Once faces are registered:
 3. Open **http://localhost:3000**
 4. Point a camera feed at the door — the `/api/recognize` endpoint accepts base64-encoded frames
 
-### Fall Detection (Live Camera)
+### Fall Detection (Live Camera + Dashboard)
 
-Run the standalone fall detection monitor (no Flask required):
+Run Flask first, then the fall detection script in a second terminal:
 
 ```bash
+# Terminal 1 — Flask must be running
+python main.py
+
+# Terminal 2 — live camera fall detector
 python scripts/fall_detection_camera.py
 ```
 
-A window opens showing your webcam with a skeleton overlay. The banner turns **red** and shows "FALL DETECTED" when a fall is detected.
+A window opens showing your webcam with a skeleton overlay. When a fall is detected:
+- The banner turns **red** with "FALL DETECTED"
+- The fall is automatically posted to the Flask API (`/api/fall/log`)
+- It appears immediately on the **Falls** dashboard page (`/falls`)
+- The **"Falls Detected Today"** stat card on the main dashboard updates
+
+> **Any person is monitored** — registered or unregistered/unknown. Fall detection uses pose estimation only, not face recognition.
 
 **Options:**
 ```bash
 python scripts/fall_detection_camera.py --camera 1       # use a different camera
 python scripts/fall_detection_camera.py --threshold 0.6  # adjust sensitivity (default 0.55)
-python scripts/fall_detection_camera.py --log falls.csv  # save fall events to CSV
+python scripts/fall_detection_camera.py --log falls.csv  # also save events to CSV
 python scripts/fall_detection_camera.py --no-display     # headless / no window
+python scripts/fall_detection_camera.py --no-api         # skip dashboard posting
+python scripts/fall_detection_camera.py --api-url http://localhost:5001  # custom server
 ```
 
 **Controls while running:**
@@ -282,7 +295,7 @@ MediaPipe extracts 33 body skeleton landmarks per frame. Three rules are scored 
 | Torso angle | 35% | Spine tilted > 50° from vertical |
 | Drop velocity | 25% | Hips dropped rapidly across recent frames |
 
-When combined confidence ≥ 0.55 → fall is declared. Fall events are logged to the `anomalies` table in the database.
+When combined confidence ≥ 0.55 → fall is declared and sent to the dashboard.
 
 > **Phase 2 (planned):** LSTM model trained on the UR Fall Detection dataset for higher accuracy across diverse fall types.
 
@@ -316,12 +329,13 @@ All endpoints are prefixed with `/api`.
 
 ### Fall Detection Endpoints
 
-| Method | Endpoint         | Description                                      |
-|--------|------------------|--------------------------------------------------|
-| POST   | `/fall/detect`   | Analyse a base64 frame for falls                 |
-| GET    | `/fall/events`   | List recent fall events from DB                  |
-| GET    | `/fall/status`   | Detector health and config                       |
-| POST   | `/fall/reset`    | Clear velocity history and cooldown              |
+| Method | Endpoint         | Description                                                        |
+|--------|------------------|--------------------------------------------------------------------|
+| POST   | `/fall/detect`   | Analyse a base64 frame for falls (re-runs detection on server)     |
+| POST   | `/fall/log`      | Log a pre-detected fall directly to DB (used by camera script)     |
+| GET    | `/fall/events`   | List recent fall events from DB                                    |
+| GET    | `/fall/status`   | Detector health and config                                         |
+| POST   | `/fall/reset`    | Clear velocity history and cooldown                                |
 
 ### Example — Recognize a face
 
@@ -438,7 +452,7 @@ FaceDoor is designed with **PIPEDA** (Canada) and **GDPR** compliance in mind:
 
 | Script                                | Purpose                                                    |
 |---------------------------------------|------------------------------------------------------------|
-| `scripts/fall_detection_camera.py`    | Live webcam fall detection with skeleton overlay (Phase 1) |
+| `scripts/fall_detection_camera.py`    | Live webcam fall detection — posts falls to dashboard via `/api/fall/log` |
 | `scripts/capture_faces.py`            | Capture face photos from webcam for registration           |
 | `scripts/register_faces.py`           | Register captured photos, extract HOG features             |
 | `scripts/clear_database.py`           | Reset the SQLite DB (preserves `data/samples/`)            |

@@ -196,3 +196,68 @@ def reset_detector():
     detector._fall_cooldown_frames = 0
     logger.info("FallDetector state reset via API")
     return jsonify({"status": "reset", "timestamp": datetime.now().isoformat()}), 200
+
+
+@fall_bp.route("/log", methods=["POST"])
+def log_fall():
+    """
+    Directly log a fall event that was already detected externally
+    (e.g. by fall_detection_camera.py running its own FallDetector).
+
+    This avoids the re-detection problem: the camera script has full
+    velocity history; Flask's detector instance does not.
+
+    Request JSON:
+        {
+          "confidence":      float,   // 0.0 – 1.0  (required)
+          "reason":          str,     // optional
+          "hip_height":      float,   // optional
+          "torso_angle_deg": float,   // optional
+          "hip_velocity":    float    // optional
+        }
+
+    Response JSON (200):
+        { "status": "logged", "timestamp": str }
+    """
+    data = request.get_json(silent=True) or {}
+
+    confidence = data.get("confidence")
+    if confidence is None:
+        return jsonify({"error": "Missing required field: confidence"}), 400
+
+    try:
+        confidence = float(confidence)
+    except (TypeError, ValueError):
+        return jsonify({"error": "confidence must be a number"}), 400
+
+    reason        = data.get("reason", "Fall detected by camera script")
+    hip_height    = data.get("hip_height", 0.0)
+    torso_angle   = data.get("torso_angle_deg", 0.0)
+    hip_velocity  = data.get("hip_velocity", 0.0)
+
+    description = (
+        f"Fall detected: {reason} | "
+        f"hip_y={hip_height:.3f} "
+        f"angle={torso_angle:.1f}° "
+        f"vel={hip_velocity:.4f}"
+    )
+
+    try:
+        db = _get_db()
+        db.log_anomaly(
+            user_id="fall_detection",
+            anomaly_type="fall_detected",
+            anomaly_score=confidence,
+            description=description,
+        )
+        logger.warning(
+            "Fall logged via /log  conf=%.2f  | %s", confidence, reason
+        )
+        return jsonify({
+            "status":    "logged",
+            "timestamp": datetime.now().isoformat(timespec="seconds"),
+        }), 200
+    except Exception as e:
+        logger.exception("Error logging fall via /log")
+        return jsonify({"error": str(e)}), 500
+

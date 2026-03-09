@@ -47,7 +47,7 @@ class AnomalyTrainer:
             anomaly_rate=0.15
         )
         
-        print(f"✓ Dataset generated: {dataset_path}")
+        print(f"[OK] Dataset generated: {dataset_path}")
         
         # Load and show stats
         events = self.generator.load_dataset(dataset_path)
@@ -83,14 +83,14 @@ class AnomalyTrainer:
         success = self.detector.train_isolation_forest(X)
         
         if success:
-            print("✓ Model training successful!")
+            print("[OK] Model training successful!")
             
             # Save model
             model_path = 'models/isolation_forest.pkl'
             self.detector.save_model(model_path)
-            print(f"✓ Model saved: {model_path}")
+            print(f"[OK] Model saved: {model_path}")
         else:
-            print("✗ Model training failed")
+            print("[FAIL] Model training failed")
             return False
         
         return True
@@ -200,7 +200,7 @@ class AnomalyTrainer:
         for event in test_events:
             result = self.detector.predict_anomaly(event)
             
-            status = "🔴 ANOMALY" if result['is_anomaly'] else "🟢 NORMAL"
+            status = "[FAIL] ANOMALY" if result['is_anomaly'] else "[OK] NORMAL"
             print(f"\n   {status}")
             print(f"      Anomaly Score: {result['anomaly_score']:.3f}")
             print(f"      Confidence: {result['confidence']:.3f}")
@@ -232,7 +232,7 @@ def run_full_pipeline():
         trainer.test_realtime_detection()
         
         print("\n" + "=" * 70)
-        print("✓ TRAINING PIPELINE COMPLETE")
+        print("[OK] TRAINING PIPELINE COMPLETE")
         print("=" * 70)
         print("\nNext steps:")
         print("1. Review model performance metrics above")

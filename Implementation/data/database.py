@@ -353,6 +353,27 @@ class Database:
             logger.error(f"Error logging anomaly: {e}")
             return False
     
+    def get_anomalies(self, limit: int = 20, anomaly_type: str = None) -> list:
+        """Retrieve recent anomaly records, optionally filtered by type."""
+        try:
+            cursor = self.conn.cursor()
+            if anomaly_type:
+                cursor.execute(
+                    "SELECT * FROM anomalies WHERE anomaly_type = ? "
+                    "ORDER BY timestamp DESC LIMIT ?",
+                    (anomaly_type, limit),
+                )
+            else:
+                cursor.execute(
+                    "SELECT * FROM anomalies ORDER BY timestamp DESC LIMIT ?",
+                    (limit,),
+                )
+            cols = [d[0] for d in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error retrieving anomalies: {e}")
+            return []
+
     def save_behavioral_profile(self, user_id: str, profile: Dict) -> bool:
         """Save or update behavioral profile"""
         try:

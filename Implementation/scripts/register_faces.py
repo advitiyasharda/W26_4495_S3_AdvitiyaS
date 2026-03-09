@@ -40,11 +40,11 @@ class FaceRegistration:
         try:
             # Add to database
             if not self.db.add_user(person_id, name, role):
-                print(f"  ✗ Could not add to database (database may be locked).")
+                print(f"  [FAIL] Could not add to database (database may be locked).")
                 print(f"     Stop the Flask server and try again.")
                 return False
             
-            print(f"  ✓ Added to database: {person_id}")
+            print(f"  [OK] Added to database: {person_id}")
             
             # Try to extract real face encodings from data/samples/{name}/
             # Use the folder name derived from the display name (spaces → underscores, lower)
@@ -74,18 +74,18 @@ class FaceRegistration:
                         encodings_registered += 1
                 
                 if encodings_registered > 0:
-                    print(f"  ✓ Registered {encodings_registered} face encoding(s) from {photo_dir}/")
+                    print(f"  [OK] Registered {encodings_registered} face encoding(s) from {photo_dir}/")
                 else:
-                    print(f"  ⚠ Found photo folder but could not extract any face encodings.")
+                    print(f"  [!] Found photo folder but could not extract any face encodings.")
                     print(f"     Check photo quality, or recapture with: python scripts/capture_faces.py")
             else:
-                print(f"  ⚠ No photo folder found at data/samples/{folder_name}/")
+                print(f"  [!] No photo folder found at data/samples/{folder_name}/")
                 print(f"     Person added to DB only. Capture photos first, then use Option 2")
                 print(f"     to register face encodings: python scripts/capture_faces.py")
             
             return True
         except Exception as e:
-            print(f"  ✗ Error: {e}")
+            print(f"  [FAIL] Error: {e}")
             return False
     
     def register_from_photos(self, person_name, person_id, role='resident'):
@@ -101,14 +101,14 @@ class FaceRegistration:
         
         # Check if photos exist
         if not Path(photo_dir).exists():
-            print(f"✗ No photos found at: {photo_dir}")
+            print(f"[FAIL] No photos found at: {photo_dir}")
             print(f"  Run: python scripts/capture_faces.py")
             return False
         
         # Count photos
         photos = [f for f in Path(photo_dir).iterdir() if f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
         if not photos:
-            print(f"✗ No image files found in: {photo_dir}")
+            print(f"[FAIL] No image files found in: {photo_dir}")
             return False
         
         print(f"\nFound {len(photos)} photos for {person_name}")
@@ -120,7 +120,7 @@ class FaceRegistration:
             try:
                 frame = cv2.imread(str(photo_path))
                 if frame is None:
-                    print(f"  ✗ Could not read {photo_path.name}")
+                    print(f"  [FAIL] Could not read {photo_path.name}")
                     continue
                 
                 # Detect faces in photo
@@ -133,44 +133,44 @@ class FaceRegistration:
                     
                     if encoding is not None:
                         encodings.append(encoding)
-                        print(f"  ✓ Extracted encoding from {photo_path.name}")
+                        print(f"  [OK] Extracted encoding from {photo_path.name}")
                     else:
-                        print(f"  ✗ Failed to extract encoding from {photo_path.name}")
+                        print(f"  [FAIL] Failed to extract encoding from {photo_path.name}")
                 else:
-                    print(f"  ✗ No face detected in {photo_path.name}")
+                    print(f"  [FAIL] No face detected in {photo_path.name}")
             except Exception as e:
-                print(f"  ✗ Error processing {photo_path.name}: {e}")
+                print(f"  [FAIL] Error processing {photo_path.name}: {e}")
         
         if not encodings:
-            print(f"\n✗ Could not extract face encodings from any photos")
+            print(f"\n[FAIL] Could not extract face encodings from any photos")
             print(f"  Tips:")
             print(f"    - Make sure photos have clear, frontal faces")
             print(f"    - Check image lighting and clarity")
             print(f"    - Re-capture photos and try again")
             return False
         
-        print(f"\n✓ Successfully extracted {len(encodings)} face encodings")
+        print(f"\n[OK] Successfully extracted {len(encodings)} face encodings")
         
         # Register person with extracted encodings
         try:
             if not self.db.add_user(person_id, person_name.replace('_', ' ').title(), role):
-                print(f"  ✗ Could not add to database (database may be locked).")
+                print(f"  [FAIL] Could not add to database (database may be locked).")
                 print(f"     Stop the Flask server and try again.")
                 return False
             
-            print(f"  ✓ Added to database")
+            print(f"  [OK] Added to database")
             
             # Register all encodings
             for encoding in encodings:
                 self.engine.register_face(person_id, person_name, encoding)
             
-            print(f"  ✓ Registered {len(encodings)} face encodings in engine")
+            print(f"  [OK] Registered {len(encodings)} face encodings in engine")
             
-            print(f"\n✓ Successfully registered {person_name}")
+            print(f"\n[OK] Successfully registered {person_name}")
             return True
             
         except Exception as e:
-            print(f"✗ Error during registration: {e}")
+            print(f"[FAIL] Error during registration: {e}")
             return False
     
     def list_registered_people(self):
@@ -241,9 +241,9 @@ def main():
             
             print(f"\nRegistering: {name} ({person_id}) as {role}...")
             if reg.register_person(person_id, name, role):
-                print(f"\n✓ Successfully registered {name}")
+                print(f"\n[OK] Successfully registered {name}")
             else:
-                print(f"\n✗ Failed to register {name}")
+                print(f"\n[FAIL] Failed to register {name}")
         
         elif choice == '2':
             # Register from photos
@@ -267,9 +267,9 @@ def main():
             
             print(f"\nRegistering: {person_name} ({person_id}) from photos...")
             if reg.register_from_photos(person_name, person_id, role):
-                print(f"\n✓ Successfully registered {person_name} from photos")
+                print(f"\n[OK] Successfully registered {person_name} from photos")
             else:
-                print(f"\n✗ Failed to register from photos")
+                print(f"\n[FAIL] Failed to register from photos")
         
         elif choice == '3':
             reg.list_registered_people()

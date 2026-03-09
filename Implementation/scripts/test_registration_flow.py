@@ -50,18 +50,18 @@ def main():
         if reg.register_from_photos(person_name, person_id, role):
             registered += 1
         else:
-            print(f"  ✗ Failed to register {person_name}")
+            print(f"  [FAIL] Failed to register {person_name}")
     
     print("\n" + "=" * 60)
     print(f"Registered {registered}/3 people")
     print("=" * 60)
     
     if registered >= 2:
-        print("\n✓ Test passed. Run quick_test to verify recognition:")
+        print("\n[OK] Test passed. Run quick_test to verify recognition:")
         print("  python3 scripts/quick_test_recognition.py")
         return 0
     else:
-        print("\n✗ Need at least 2 people with valid face photos in data/samples/")
+        print("\n[FAIL] Need at least 2 people with valid face photos in data/samples/")
         return 1
 
 

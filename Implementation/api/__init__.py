@@ -69,8 +69,20 @@ def create_app(config_name="config"):
     else:
         logger.warning("No trained anomaly model found at %s — run scripts/train_anomaly_detection.py", model_path)
 
+    # Initialise fall detector (stateful — one instance per server process)
+    from models.fall_detection import FallDetector
+    try:
+        app.fall_detector = FallDetector()
+        logger.info("FallDetector initialised (Phase 1 — rules-based)")
+    except Exception as e:
+        app.fall_detector = None
+        logger.warning("FallDetector could not be initialised: %s", e)
+
     # Register blueprints
     from api.routes import api_bp
     app.register_blueprint(api_bp, url_prefix="/api")
+
+    from api.fall_detection_routes import fall_bp
+    app.register_blueprint(fall_bp, url_prefix="/api/fall")
 
     return app

@@ -91,10 +91,10 @@ def capture_face_images(person_name, num_photos=10):
                 
                 filename = f'{save_dir}/{person_name}_{captured+1}.jpg'
                 cv2.imwrite(filename, face_roi)
-                print(f"  ✓ Photo {captured+1}/{num_photos} saved: {filename}")
+                print(f"  [OK] Photo {captured+1}/{num_photos} saved: {filename}")
                 captured += 1
             else:
-                print("  ✗ No face detected! Please position your face in the frame.")
+                print("  [FAIL] No face detected! Please position your face in the frame.")
         elif key == ord('q') or key == ord('Q'):  # Q
             break
     
@@ -103,15 +103,15 @@ def capture_face_images(person_name, num_photos=10):
     
     print("\n" + "=" * 60)
     if captured > 0:
-        print(f"✓ SUCCESS: Captured {captured}/{num_photos} photos")
-        print(f"✓ Saved to: {save_dir}/")
+        print(f"[OK] SUCCESS: Captured {captured}/{num_photos} photos")
+        print(f"[OK] Saved to: {save_dir}/")
         print("\nNext steps:")
         print("  1. python3 scripts/register_faces.py  (Register in system)")
         print("  2. python3 tests/test_facial_recognition.py  (Test detection)")
         print("=" * 60)
         return True
     else:
-        print("✗ FAILED: No photos captured")
+        print("[FAIL] FAILED: No photos captured")
         print("=" * 60)
         return False
 
@@ -176,12 +176,12 @@ def register_captured_person(person_name):
         engine = FacialRecognitionEngine()
         
         if not db.add_user(person_id, person_name.replace('_', ' ').title(), role):
-            print(f"  ✗ Could not add to database (database may be locked).")
+            print(f"  [FAIL] Could not add to database (database may be locked).")
             print(f"     Stop the Flask server (Ctrl+C in its terminal) and run:")
             print(f"     python3 scripts/register_faces.py  → option 2 to register from photos")
             return
         
-        print(f"  ✓ Added to database")
+        print(f"  [OK] Added to database")
         
         # Extract real face encodings from captured photos
         photo_dir = Path(f'data/samples/{person_name}')
@@ -203,14 +203,14 @@ def register_captured_person(person_name):
                 encodings_registered += 1
         
         if encodings_registered == 0:
-            print(f"  ✗ Could not extract face encodings from photos in {photo_dir}")
+            print(f"  [FAIL] Could not extract face encodings from photos in {photo_dir}")
             print(f"     Check photo quality and try recapturing.")
             return
         
-        print(f"  ✓ Registered {encodings_registered} face encoding(s) in engine")
+        print(f"  [OK] Registered {encodings_registered} face encoding(s) in engine")
         
         print("\n" + "=" * 60)
-        print("✓ REGISTRATION COMPLETE")
+        print("[OK] REGISTRATION COMPLETE")
         print("=" * 60)
         print(f"  Person ID: {person_id}")
         print(f"  Name: {person_name.replace('_', ' ').title()}")

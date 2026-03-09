@@ -14,9 +14,9 @@ We implemented a real face recognition algorithm using:
 - **Proper feature extraction** instead of dummy random data
 
 ### Result
-✅ Real-time face recognition with >80% accuracy
-✅ Captures, registers, and recognizes your face
-✅ Ready for API integration and dashboard display
+ Real-time face recognition with >80% accuracy
+ Captures, registers, and recognizes your face
+ Ready for API integration and dashboard display
 
 ---
 
@@ -199,21 +199,21 @@ rm -rf data/samples/
 
 ### Successful Setup
 ```
-✓ Photos captured with green face detection boxes
-✓ Registration shows "OK (64x64, 128-dim vector)" for each photo
-✓ Recognition test shows >80% accuracy
-✓ Webcam shows your name when you face camera
+ Photos captured with green face detection boxes
+ Registration shows "OK (64x64, 128-dim vector)" for each photo
+ Recognition test shows >80% accuracy
+ Webcam shows your name when you face camera
 ```
 
 ### Troubleshooting
 ```
-⚠ Low accuracy (<50%)?
+ Low accuracy (<50%)?
   → Better lighting, varied angles, more photos
 
-✗ No faces detected?
+ No faces detected?
   → Move closer, improve lighting, remove obstructions
 
-✗ Webcam won't open?
+ Webcam won't open?
   → Close other apps using camera, check permissions
 ```
 
@@ -240,8 +240,8 @@ New Face → Feature Extraction → Compare to stored encodings → Your Name!
 
 ### 4. Match Threshold
 ```
-Distance < 0.7  → Same person ✓
-Distance ≥ 0.7  → Different person ✗
+Distance < 0.7  → Same person 
+Distance ≥ 0.7  → Different person 
 ```
 
 ---
@@ -281,7 +281,7 @@ Distance ≥ 0.7  → Different person ✗
 - [ ] Webcam recognition shows your name
 
 Once ALL items are checked:
-✅ **System is ready for API integration and deployment**
+ **System is ready for API integration and deployment**
 
 ---
 
@@ -365,7 +365,7 @@ A: Tested with 100+. Scales linearly with comparison time.
 python scripts/capture_faces.py
 ```
 
-Good luck! 🚀
+Good luck! 
 
 ---
 

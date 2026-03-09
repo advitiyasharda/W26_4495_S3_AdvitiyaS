@@ -1,6 +1,6 @@
 # FaceDoor — Smart Door Security System
 
-A facial recognition-based access control and monitoring system designed for elderly care facilities. It identifies residents and staff at entry points, logs every access event, detects security threats, and surfaces everything through a modern web dashboard.
+A facial recognition-based access control and monitoring system designed for elderly care facilities. It identifies residents and staff at entry points, logs every access event, detects behavioural anomalies, monitors for falls, and surfaces everything through a modern web dashboard.
 
 ---
 
@@ -17,6 +17,7 @@ A facial recognition-based access control and monitoring system designed for eld
 - [Usage](#usage)
   - [Registering Faces](#registering-faces)
   - [Running the System](#running-the-system)
+  - [Fall Detection (Live Camera)](#fall-detection-live-camera)
   - [Diagnostics](#diagnostics)
 - [API Reference](#api-reference)
 - [Dashboard Pages](#dashboard-pages)
@@ -33,33 +34,37 @@ FaceDoor provides:
 
 - **Facial Recognition** — detects and identifies people at the door using HOG feature extraction and Euclidean distance matching (85–95% accuracy, runs on Raspberry Pi)
 - **Threat Detection** — rules-based alerts for failed access attempts, unusual hours, unrecognised faces, and frequency spikes
-- **Anomaly Detection** — Isolation Forest ML model flags unusual behavioural patterns (e.g. inactivity, off-hours access)
+- **Anomaly Detection** — Isolation Forest ML model flags unusual behavioural patterns (e.g. inactivity, off-hours access, failed access bursts)
+- **Fall Detection** — real-time rules-based fall detector using MediaPipe Pose skeleton tracking; detects falls via hip height, torso angle, and drop velocity
 - **Audit Logging** — every system action is logged for PIPEDA / GDPR compliance
-- **Live Dashboard** — real-time monitoring of entries/exits, alerts, and audit trail via a Next.js web app
+- **Live Dashboard** — real-time monitoring of entries/exits, alerts, falls, and audit trail via a Next.js web app
 
 ---
 
 ## Architecture
 
 ```
-┌─────────────────────────────┐        ┌──────────────────────────────┐
-│   Next.js Frontend          │        │   Flask REST API             │
-│   localhost:3000            │◄──────►│   localhost:5000             │
-│                             │  HTTP  │                              │
-│  Dashboard  /               │        │  /api/recognize              │
-│  Alerts     /alerts         │        │  /api/logs                   │
-│  Logs       /logs           │        │  /api/threats                │
-│  Audit      /compliance     │        │  /api/stats                  │
-└─────────────────────────────┘        │  /api/compliance/audit       │
-                                       └──────────────┬───────────────┘
+┌─────────────────────────────┐        ┌──────────────────────────────────┐
+│   Next.js Frontend          │        │   Flask REST API                 │
+│   localhost:3000            │◄──────►│   localhost:5001                 │
+│                             │  HTTP  │                                  │
+│  Dashboard  /               │        │  /api/recognize                  │
+│  Alerts     /alerts         │        │  /api/logs                       │
+│  Logs       /logs           │        │  /api/threats                    │
+│  Falls      /falls          │        │  /api/stats                      │
+│  Audit      /compliance     │        │  /api/compliance/audit           │
+└─────────────────────────────┘        │  /api/fall/detect                │
+                                       │  /api/fall/events                │
+                                       │  /api/fall/status                │
+                                       └──────────────┬───────────────────┘
                                                       │
-                              ┌───────────────────────▼───────────────┐
-                              │  SQLite Database  (data/doorface.db)  │
-                              │  Tables: users, access_logs,          │
-                              │          threats, anomalies,          │
-                              │          audit_logs,                  │
-                              │          behavioral_profiles          │
-                              └───────────────────────────────────────┘
+                              ┌───────────────────────▼───────────────────┐
+                              │   SQLite Database  (data/doorface.db)     │
+                              │   Tables: users, access_logs,             │
+                              │           threats, anomalies,             │
+                              │           audit_logs,                     │
+                              │           behavioral_profiles             │
+                              └───────────────────────────────────────────┘
 ```
 
 The Next.js dev server proxies all `/api/*` requests to Flask automatically — no CORS issues during development.
@@ -68,92 +73,91 @@ The Next.js dev server proxies all `/api/*` requests to Flask automatically — 
 
 ## Tech Stack
 
-| Layer             | Technology                                      |
-|-------------------|-------------------------------------------------|
-| Backend           | Python 3.12, Flask 3.x                         |
-| Computer Vision   | OpenCV 4.x (Haar Cascade, HOG)                 |
-| Machine Learning  | scikit-learn (Isolation Forest)                 |
-| Database          | SQLite via `sqlite3`                            |
-| Frontend          | Next.js 16 (App Router), React 19, TypeScript  |
-| Styling           | Tailwind CSS                                    |
-| Charts            | Recharts                                        |
-| Target Hardware   | Raspberry Pi 4 / Jetson Nano                   |
+| Layer              | Technology                                          |
+|--------------------|-----------------------------------------------------|
+| Backend            | Python 3.9+, Flask 3.x                             |
+| Computer Vision    | OpenCV 4.x (Haar Cascade, HOG)                     |
+| Pose Estimation    | MediaPipe 0.10 (PoseLandmarker — Tasks API)        |
+| Machine Learning   | scikit-learn (Isolation Forest), StandardScaler    |
+| Database           | SQLite via `sqlite3`                               |
+| Frontend           | Next.js 15 (App Router), React 19, TypeScript      |
+| Styling            | Tailwind CSS                                        |
+| Charts             | Recharts                                            |
+| Target Hardware    | Raspberry Pi 4 / Jetson Nano                       |
 
 ---
 
 ## Project Structure
 
-At a high level:
-
-- **Backend API** in `api/`, `data/`, `models/`, wired up by `main.py`
-- **Next.js dashboard** in `frontend/`
-- **Scripts** in `scripts/` (capture, register, diagnose, train, etc.)
-- **Tests** in `tests/`
-- **Docs** in `docs/`
-
 ```text
-project-root/
+Implementation/
 │
-├── main.py                        # Flask app entry point (API only)
-├── config.py                      # Configuration constants
-├── requirements.txt               # Python dependencies
+├── main.py                          # Flask app entry point
+├── config.py                        # Configuration constants
+├── requirements.txt                 # Python dependencies
 │
-├── api/                           # REST API + recognition logic
-│   ├── __init__.py                # Flask app factory + CORS setup
-│   ├── routes.py                  # REST API endpoints (/api/...)
-│   ├── facial_recognition.py      # Face detection & matching engine
-│   └── threat_detection.py        # Rules-based threat detection
+├── api/                             # REST API layer
+│   ├── __init__.py                  # Flask app factory — loads all models at startup
+│   ├── routes.py                    # Core endpoints (recognize, logs, threats, stats)
+│   ├── facial_recognition.py        # HOG face detection & matching engine
+│   ├── fall_detection_routes.py     # Fall detection endpoints (/api/fall/...)
+│   └── threat_detection.py          # Rules-based threat scoring
 │
-├── data/                          # Data layer + samples
-│   ├── database.py                # SQLite manager (all DB operations)
-│   ├── data_generator.py          # Synthetic training data generator
-│   ├── doorface.db                # SQLite database (auto-created)
-│   └── samples/                   # Captured face photos
+├── models/                          # ML models
+│   ├── anomaly_detection.py         # Isolation Forest anomaly detector
+│   ├── isolation_forest.pkl         # Trained Isolation Forest model artifact
+│   ├── fall_detection.py            # FallDetector class (MediaPipe rules-based)
+│   └── pose_landmarker.task         # MediaPipe pre-trained pose skeleton model
+│
+├── data/                            # Data layer
+│   ├── database.py                  # SQLite manager (all DB read/write operations)
+│   ├── data_generator.py            # Synthetic training data generator
+│   ├── doorface.db                  # SQLite database (auto-created, gitignored)
+│   ├── synthetic_dataset.csv        # Generated training data for anomaly model
+│   └── samples/                     # Captured face photos per person
 │       └── {person_name}/
 │           └── *.jpg / *.png
 │
-├── models/
-│   ├── anomaly_detection.py       # Isolation Forest anomaly detector
-│   └── isolation_forest.pkl       # Trained model artifact
-│
-├── frontend/                      # Next.js dashboard (App Router)
+├── frontend/                        # Next.js dashboard (App Router)
 │   ├── app/
-│   │   ├── layout.tsx             # Root layout with sidebar
-│   │   ├── page.tsx               # Main dashboard (stats + charts)
-│   │   ├── alerts/page.tsx        # Security alerts feed
-│   │   ├── logs/page.tsx          # Access logs + “Registered People”
-│   │   └── compliance/page.tsx    # Audit trail (compliance)
+│   │   ├── layout.tsx               # Root layout with sidebar
+│   │   ├── page.tsx                 # Main dashboard (stats + charts)
+│   │   ├── alerts/page.tsx          # Security alerts feed
+│   │   ├── falls/page.tsx           # Fall detection history & live status
+│   │   ├── logs/page.tsx            # Access logs + registered people
+│   │   └── compliance/page.tsx      # Audit trail (PIPEDA compliance)
 │   ├── components/
-│   │   ├── Sidebar.tsx            # Collapsible nav sidebar
-│   │   ├── StatCard.tsx           # KPI stat cards
-│   │   ├── AccessChart.tsx        # Bar chart (entries/exits by hour)
-│   │   ├── StatusDonut.tsx        # Donut chart (access breakdown)
-│   │   ├── AccessLogsTable.tsx    # Paginated access log table
-│   │   ├── AlertList.tsx          # Threat alert cards list
-│   │   ├── AuditTable.tsx         # Compliance audit table
-│   │   └── StatusBadge.tsx        # Small status pill component
+│   │   ├── Sidebar.tsx              # Collapsible nav sidebar
+│   │   ├── StatCard.tsx             # KPI stat cards
+│   │   ├── AccessChart.tsx          # Bar chart (entries/exits by hour)
+│   │   ├── StatusDonut.tsx          # Donut chart (access breakdown)
+│   │   ├── AccessLogsTable.tsx      # Paginated access log table
+│   │   ├── AlertList.tsx            # Threat alert cards list
+│   │   ├── AuditTable.tsx           # Compliance audit table
+│   │   └── StatusBadge.tsx          # Small status pill component
 │   ├── lib/
-│   │   ├── api.ts                 # Typed API client (fetch wrappers)
-│   │   └── demoData.ts            # Demo data when DB is empty
-│   ├── next.config.ts             # API proxy (frontend ↔ Flask)
-│   ├── tailwind.config.ts         # Tailwind design system
+│   │   ├── api.ts                   # Typed API client (all fetch wrappers)
+│   │   └── demoData.ts              # Demo data when DB is empty
+│   ├── next.config.ts               # API proxy (frontend → Flask :5001)
+│   ├── tailwind.config.ts           # Tailwind design tokens
 │   └── package.json
 │
-├── scripts/                       # Utility scripts (run from project root)
-│   ├── capture_faces.py           # Capture face photos from webcam
-│   ├── register_faces.py          # Register faces into DB + encodings
-│   ├── clear_database.py          # Reset the SQLite DB (keep samples/)
-│   ├── diagnose_recognition.py   # System diagnostics tool
-│   ├── quick_test_recognition.py # Quick recognition test
-│   └── train_anomaly_detection.py# Train ML models
+├── scripts/                         # Utility scripts (run from project root)
+│   ├── fall_detection_camera.py     # Live webcam fall detection (Phase 1)
+│   ├── capture_faces.py             # Capture face photos from webcam
+│   ├── register_faces.py            # Register faces into DB + extract encodings
+│   ├── clear_database.py            # Reset the SQLite DB (preserves samples/)
+│   ├── diagnose_recognition.py      # Full system diagnostics tool
+│   ├── quick_test_recognition.py    # Quick recognition sanity check
+│   └── train_anomaly_detection.py   # Generate data and train Isolation Forest
 │
-├── tests/                         # Test scripts (run from project root)
-│   ├── test_api_recognize.py      # API-level tests for /api/recognize
+├── tests/                           # Test scripts (run from project root)
+│   ├── test_api_recognize.py        # API-level tests for /api/recognize
 │   ├── test_face_recognition_real.py
 │   ├── test_facial_recognition.py
-│   └── test_integration.py       # End-to-end integration tests
+│   └── test_integration.py          # End-to-end integration tests
 │
-├── docs/                          # Architecture, API, deployment, guides
+├── docs/                            # Architecture, API, deployment, guides
 │   ├── ARCHITECTURE.md
 │   ├── API_DOCS.md
 │   ├── DEPLOYMENT.md
@@ -161,36 +165,28 @@ project-root/
 │   ├── GET_STARTED.md
 │   ├── SECURITY.md
 │   ├── TRAINING_GUIDE.md
-│   └── images/                   # Doc images
+│   └── images/
 │
-├── screenshots/                   # UI screenshots for reports/README
-│   ├── dashboard.png
-│   ├── access-logs.png
-│   ├── alerts.png
-│   └── audit-trail.png
-│
-└── dashboard/                     # Legacy static HTML dashboard (unused)
-    ├── templates/
-    └── static/
+└── screenshots/                     # UI screenshots for reports / README
+    ├── dashboard.png
+    ├── access-logs.png
+    ├── alerts.png
+    └── audit-trail.png
 ```
 
 ---
 
 ## Getting Started
 
-> **Important:** Always run commands from the **project root** directory. Scripts and tests expect to find `data/`, `api/`, and `models/` relative to the current working directory.
+> **Important:** Always run commands from the **`Implementation/`** directory. Scripts and the Flask app expect to find `data/`, `api/`, and `models/` relative to the current working directory.
 
 ### Prerequisites
 
-| Tool       | Version  | Download                        |
-|------------|----------|---------------------------------|
-| Python     | 3.12+    | https://www.python.org          |
-| Node.js    | 18+ LTS  | https://nodejs.org              |
-| npm        | 9+       | Included with Node.js           |
-
-> **Note:** Both were automatically installed via `winget` during initial setup on Windows.
-
----
+| Tool    | Version | Download                |
+|---------|---------|-------------------------|
+| Python  | 3.9+    | https://www.python.org  |
+| Node.js | 18+ LTS | https://nodejs.org      |
+| npm     | 9+      | Included with Node.js   |
 
 ### 1. Backend (Flask API)
 
@@ -198,13 +194,15 @@ project-root/
 # Install Python dependencies
 pip install -r requirements.txt
 
-# Start the API server
+# Download the MediaPipe pose model (one-time, ~9 MB)
+curl -L -o models/pose_landmarker.task \
+  https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task
+
+# Start the API server (use python3 on macOS/Linux)
 python main.py
 ```
 
-Flask API will be available at **http://localhost:5000**
-
----
+Flask API will be available at **http://localhost:5001**
 
 ### 2. Frontend (Next.js)
 
@@ -230,7 +228,7 @@ Dashboard will be available at **http://localhost:3000**
 
 ### Registering Faces
 
-Before the system can recognise anyone, you need to register faces:
+Before the system can recognise anyone, register faces:
 
 ```bash
 # Step 1 — capture face photos from your webcam
@@ -246,10 +244,47 @@ The system will prompt for a name, capture several photos, extract HOG features,
 
 Once faces are registered:
 
-1. Start the Flask API: `python main.py`
-2. Start the Next.js dashboard: `cd frontend && npm run dev`
+1. Start Flask: `python main.py`
+2. Start Next.js: `cd frontend && npm run dev`
 3. Open **http://localhost:3000**
 4. Point a camera feed at the door — the `/api/recognize` endpoint accepts base64-encoded frames
+
+### Fall Detection (Live Camera)
+
+Run the standalone fall detection monitor (no Flask required):
+
+```bash
+python scripts/fall_detection_camera.py
+```
+
+A window opens showing your webcam with a skeleton overlay. The banner turns **red** and shows "FALL DETECTED" when a fall is detected.
+
+**Options:**
+```bash
+python scripts/fall_detection_camera.py --camera 1       # use a different camera
+python scripts/fall_detection_camera.py --threshold 0.6  # adjust sensitivity (default 0.55)
+python scripts/fall_detection_camera.py --log falls.csv  # save fall events to CSV
+python scripts/fall_detection_camera.py --no-display     # headless / no window
+```
+
+**Controls while running:**
+- `Q` — quit
+- `S` — save screenshot to `screenshots/`
+- `R` — reset fall history
+
+**How it works (Phase 1 — Rules-Based):**
+
+MediaPipe extracts 33 body skeleton landmarks per frame. Three rules are scored and combined:
+
+| Rule | Weight | Trigger |
+|------|--------|---------|
+| Hip height | 40% | Hips near bottom of frame (person on floor) |
+| Torso angle | 35% | Spine tilted > 50° from vertical |
+| Drop velocity | 25% | Hips dropped rapidly across recent frames |
+
+When combined confidence ≥ 0.55 → fall is declared. Fall events are logged to the `anomalies` table in the database.
+
+> **Phase 2 (planned):** LSTM model trained on the UR Fall Detection dataset for higher accuracy across diverse fall types.
 
 ### Diagnostics
 
@@ -259,7 +294,7 @@ If recognition is not working:
 python scripts/diagnose_recognition.py
 ```
 
-This checks camera connectivity, face detection, stored samples, recognition accuracy, and database health.
+Checks camera connectivity, face detection, stored samples, recognition accuracy, and database health.
 
 ---
 
@@ -267,20 +302,31 @@ This checks camera connectivity, face detection, stored samples, recognition acc
 
 All endpoints are prefixed with `/api`.
 
-| Method | Endpoint              | Description                          |
-|--------|-----------------------|--------------------------------------|
-| GET    | `/health`             | Health check                         |
-| POST   | `/recognize`          | Recognize a face from a camera frame |
-| POST   | `/log-access`         | Log an access event                  |
-| GET    | `/logs`               | Get access logs (paginated)          |
-| GET    | `/threats`            | Get active security threats          |
-| GET    | `/stats`              | System statistics                    |
-| GET    | `/compliance/audit`   | PIPEDA audit log                     |
+### Core Endpoints
+
+| Method | Endpoint            | Description                          |
+|--------|---------------------|--------------------------------------|
+| GET    | `/health`           | Health check                         |
+| POST   | `/recognize`        | Recognize a face from a camera frame |
+| POST   | `/log-access`       | Log an access event manually         |
+| GET    | `/logs`             | Get access logs (paginated)          |
+| GET    | `/threats`          | Get active security threats          |
+| GET    | `/stats`            | System statistics                    |
+| GET    | `/compliance/audit` | PIPEDA audit log                     |
+
+### Fall Detection Endpoints
+
+| Method | Endpoint         | Description                                      |
+|--------|------------------|--------------------------------------------------|
+| POST   | `/fall/detect`   | Analyse a base64 frame for falls                 |
+| GET    | `/fall/events`   | List recent fall events from DB                  |
+| GET    | `/fall/status`   | Detector health and config                       |
+| POST   | `/fall/reset`    | Clear velocity history and cooldown              |
 
 ### Example — Recognize a face
 
 ```bash
-curl -X POST http://localhost:5000/api/recognize \
+curl -X POST http://localhost:5001/api/recognize \
   -H "Content-Type: application/json" \
   -d '{"frame": "<base64_encoded_image>"}'
 ```
@@ -292,28 +338,45 @@ Response:
   "name": "Margaret T.",
   "confidence": 0.94,
   "access_granted": true,
-  "timestamp": "2026-02-17T14:30:00"
+  "timestamp": "2026-03-08T14:30:00"
 }
 ```
 
-### Example — Get access logs
+### Example — Get fall events
 
 ```bash
-curl "http://localhost:5000/api/logs?limit=20"
+curl "http://localhost:5001/api/fall/events?limit=10"
+```
+
+Response:
+```json
+{
+  "events": [
+    {
+      "anomaly_id": 12,
+      "anomaly_type": "fall_detected",
+      "anomaly_score": 0.78,
+      "description": "Fall detected: hips low (0.81); torso tilted 67°",
+      "timestamp": "2026-03-08T21:30:00"
+    }
+  ],
+  "count": 1
+}
 ```
 
 ---
 
 ## Dashboard Pages
 
-| Page        | URL           | Description                                                      |
-|-------------|---------------|------------------------------------------------------------------|
-| Dashboard   | `/`           | KPI cards, hourly bar chart, access breakdown donut, recent logs |
-| Alerts      | `/alerts`     | Active threats filtered by ALL / HIGH / CRITICAL severity        |
-| Access Logs | `/logs`       | Full paginated access log with entry/exit badges                 |
-| Audit Trail | `/compliance` | PIPEDA-compliant audit log with CSV export                       |
+| Page        | URL           | Description                                                       |
+|-------------|---------------|-------------------------------------------------------------------|
+| Dashboard   | `/`           | KPI cards (including falls today), hourly chart, recent logs      |
+| Alerts      | `/alerts`     | Active threats filtered by ALL / HIGH / CRITICAL severity         |
+| Falls       | `/falls`      | Fall detection history, confidence scores, detector live status   |
+| Access Logs | `/logs`       | Full paginated access log with entry/exit badges                  |
+| Audit Trail | `/compliance` | PIPEDA-compliant audit log with CSV export                        |
 
-> **Demo mode:** When the database has no registered faces, all pages automatically show realistic demo data. A yellow `Demo data` badge appears in the page header. Demo data disappears as soon as real users are registered.
+> **Demo mode:** When the database has no registered faces, pages automatically show realistic demo data. A yellow `Demo data` badge appears in the page header.
 
 ---
 
@@ -337,15 +400,25 @@ curl "http://localhost:5000/api/logs?limit=20"
 
 All system settings live in `config.py`:
 
-| Setting                        | Default          | Description                                  |
-|--------------------------------|------------------|----------------------------------------------|
-| `CONFIDENCE_THRESHOLD`         | `0.6`            | Minimum face match confidence to grant access |
-| `FAILED_ATTEMPTS_THRESHOLD`    | `3`              | Failed attempts before alert                 |
-| `INACTIVITY_THRESHOLD_HOURS`   | `24`             | Hours without access before alert            |
-| `UNUSUAL_HOURS`                | `22:00 – 06:00`  | Hours flagged as unusual access              |
-| `ANOMALY_SCORE_THRESHOLD`      | `0.7`            | Isolation Forest score cutoff                |
-| `DATABASE_PATH`                | `data/doorface.db` | SQLite file location                       |
-| `TARGET_DEVICE`                | `raspberry_pi`   | Hardware target for optimisation             |
+| Setting                       | Default            | Description                                   |
+|-------------------------------|--------------------|-----------------------------------------------|
+| `CONFIDENCE_THRESHOLD`        | `0.6`              | Minimum face match confidence to grant access |
+| `FAILED_ATTEMPTS_THRESHOLD`   | `3`                | Failed attempts before threat alert           |
+| `INACTIVITY_THRESHOLD_HOURS`  | `24`               | Hours without access before alert             |
+| `UNUSUAL_HOURS`               | `22:00 – 06:00`    | Hours flagged as unusual access               |
+| `ANOMALY_SCORE_THRESHOLD`     | `0.7`              | Isolation Forest score cutoff                 |
+| `DATABASE_PATH`               | `data/doorface.db` | SQLite file location                          |
+| `TARGET_DEVICE`               | `raspberry_pi`     | Hardware target for optimisation              |
+
+Fall detection thresholds are tunable at the top of `models/fall_detection.py`:
+
+| Setting                  | Default | Description                              |
+|--------------------------|---------|------------------------------------------|
+| `FALL_THRESHOLD`         | `0.55`  | Weighted confidence to declare a fall    |
+| `HIP_HEIGHT_THRESHOLD`   | `0.72`  | Normalised y position considered "floor" |
+| `TORSO_ANGLE_THRESHOLD`  | `50°`   | Degrees from vertical = lying down       |
+| `VELOCITY_THRESHOLD`     | `0.07`  | Normalised drop per frame = fast fall    |
+| `VELOCITY_WINDOW`        | `8`     | Frames tracked for velocity calculation  |
 
 ---
 
@@ -363,18 +436,19 @@ FaceDoor is designed with **PIPEDA** (Canada) and **GDPR** compliance in mind:
 
 ## Scripts
 
-| Script                        | Purpose                                            |
-|-------------------------------|----------------------------------------------------|
-| `scripts/capture_faces.py`            | Capture face photos from webcam for registration   |
-| `scripts/register_faces.py`           | Register captured photos, extract HOG features     |
-| `scripts/clear_database.py`          | Reset the SQLite DB (keep samples/)                |
-| `scripts/diagnose_recognition.py`     | Full system diagnostics (camera, DB, recognition)  |
-| `scripts/quick_test_recognition.py`   | Quick test: photo + live webcam recognition        |
-| `scripts/train_anomaly_detection.py`  | Generate synthetic data and train Isolation Forest |
-| `tests/test_facial_recognition.py`    | Component-level recognition tests                  |
-| `tests/test_face_recognition_real.py` | Extended webcam + photo recognition tests          |
-| `tests/test_integration.py`           | End-to-end pipeline integration tests              |
-| `tests/test_api_recognize.py`         | API-level tests for /api/recognize (webcam)        |
+| Script                                | Purpose                                                    |
+|---------------------------------------|------------------------------------------------------------|
+| `scripts/fall_detection_camera.py`    | Live webcam fall detection with skeleton overlay (Phase 1) |
+| `scripts/capture_faces.py`            | Capture face photos from webcam for registration           |
+| `scripts/register_faces.py`           | Register captured photos, extract HOG features             |
+| `scripts/clear_database.py`           | Reset the SQLite DB (preserves `data/samples/`)            |
+| `scripts/diagnose_recognition.py`     | Full system diagnostics (camera, DB, recognition)          |
+| `scripts/quick_test_recognition.py`   | Quick test: photo + live webcam recognition                |
+| `scripts/train_anomaly_detection.py`  | Generate synthetic data and retrain Isolation Forest       |
+| `tests/test_facial_recognition.py`    | Component-level recognition unit tests                     |
+| `tests/test_face_recognition_real.py` | Extended webcam + photo recognition tests                  |
+| `tests/test_integration.py`           | End-to-end pipeline integration tests                      |
+| `tests/test_api_recognize.py`         | API-level tests for `/api/recognize`                       |
 
 ---
 

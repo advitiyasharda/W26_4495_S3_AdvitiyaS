@@ -6,9 +6,9 @@ Your Door Face Panels system now has working facial recognition! Here's how to t
 "I captured my face, but the system doesn't recognize me"
 
 ## What We Fixed
-- ✓ **Issue**: recognize_face() was returning placeholder results
-- ✓ **Solution**: Implemented real HOG-based face encoding + Euclidean distance matching
-- ✓ **Result**: System now actually recognizes your captured face
+-  **Issue**: recognize_face() was returning placeholder results
+-  **Solution**: Implemented real HOG-based face encoding + Euclidean distance matching
+-  **Result**: System now actually recognizes your captured face
 
 ---
 
@@ -51,10 +51,10 @@ python scripts/quick_test_recognition.py
 
 | Accuracy | Status | What to Do |
 |----------|--------|-----------|
-| >85% | ✓ Great! | System ready to use |
-| 70-85% | ✓ Good | Works well enough |
-| 50-70% | ⚠ Okay | Capture better photos |
-| <50% | ✗ Poor | Review troubleshooting below |
+| >85% |  Great! | System ready to use |
+| 70-85% |  Good | Works well enough |
+| 50-70% |  Okay | Capture better photos |
+| <50% |  Poor | Review troubleshooting below |
 
 ---
 
@@ -62,7 +62,7 @@ python scripts/quick_test_recognition.py
 
 ### "No faces detected" in photos
 ```
-⚠ Face detection failed
+ Face detection failed
 ```
 - Move **closer** to camera (face should be 30-50 cm)
 - **Better lighting** (avoid shadows, backlight)
@@ -88,7 +88,7 @@ python scripts/quick_test_recognition.py
 
 ### Webcam won't open
 ```
-✗ Cannot open webcam!
+ Cannot open webcam!
 ```
 - Check camera is connected
 - Close other apps using camera (Zoom, Teams, etc.)
@@ -116,11 +116,11 @@ python scripts/diagnose_recognition.py
 ```
 
 This checks:
-1. ✓ Camera is available and working
-2. ✓ Face detection works
-3. ✓ Sample photos are readable
-4. ✓ Recognition engine is loaded
-5. ✓ Database is healthy
+1.  Camera is available and working
+2.  Face detection works
+3.  Sample photos are readable
+4.  Recognition engine is loaded
+5.  Database is healthy
 
 ---
 
@@ -187,9 +187,9 @@ TEST RECOGNITION
 python scripts/quick_test_recognition.py
      ↓
 GET RESULTS
-✓ Recognition working? → DONE!
-⚠ Low accuracy? → See troubleshooting
-✗ Errors? → Run python scripts/diagnose_recognition.py
+ Recognition working? → DONE!
+ Low accuracy? → See troubleshooting
+ Errors? → Run python scripts/diagnose_recognition.py
 ```
 
 ---
@@ -287,9 +287,9 @@ sqlite3 data/doorface.db
 
 ## Support
 
-- ✓ Photos with green box → Face detection working
-- ✓ Accuracy >70% → Recognition working
-- ✓ All diagnostics pass → System ready
+-  Photos with green box → Face detection working
+-  Accuracy >70% → Recognition working
+-  All diagnostics pass → System ready
 
 For issues:
 1. Check troubleshooting section
@@ -301,12 +301,12 @@ For issues:
 ## Summary
 
 You now have:
-✅ Face capture utility (scripts/capture_faces.py)
-✅ Face registration system (scripts/register_faces.py)
-✅ Real face recognition algorithm (HOG + distance matching)
-✅ Testing scripts (scripts/quick_test_recognition.py)
-✅ Diagnostics tool (scripts/diagnose_recognition.py)
-✅ Complete documentation (FACIAL_RECOGNITION_GUIDE.md)
+ Face capture utility (scripts/capture_faces.py)
+ Face registration system (scripts/register_faces.py)
+ Real face recognition algorithm (HOG + distance matching)
+ Testing scripts (scripts/quick_test_recognition.py)
+ Diagnostics tool (scripts/diagnose_recognition.py)
+ Complete documentation (FACIAL_RECOGNITION_GUIDE.md)
 
 **Start with**: `python scripts/capture_faces.py`
 

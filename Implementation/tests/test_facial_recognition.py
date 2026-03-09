@@ -55,7 +55,7 @@ def register_test_faces(engine, db):
     
     for resident in test_residents:
         db.add_user(resident['person_id'], resident['name'], resident['role'])
-        print(f"   ✓ Registered {resident['name']} ({resident['person_id']})")
+        print(f"   [OK] Registered {resident['name']} ({resident['person_id']})")
     
     print(f"   Total residents/caregivers: {len(test_residents)}")
 
@@ -200,7 +200,7 @@ def integration_test():
     print("[Logging test access event...]")
     success = db.log_access('test_resident_001', 'entry', confidence=0.92, status='success')
     if success:
-        print("   ✓ Access logged successfully")
+        print("   [OK] Access logged successfully")
     
     # Log a test threat
     print("[Logging test threat...]")

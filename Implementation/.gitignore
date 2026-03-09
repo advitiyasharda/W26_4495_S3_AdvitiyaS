@@ -4,3 +4,10 @@ out/
 build/
 .env*.local
 .DS_Store
+
+# Runtime databases
+data/doorface.db
+
+# ML model artifacts (too large / binary — download separately)
+models/*.pkl
+models/*.task

@@ -53,11 +53,11 @@ def _extract_face_features(self, face_roi):
 ```
 
 **Key improvements:**
-- ✓ Histogram equalization for better lighting invariance
-- ✓ Proper HOG configuration (64×64 cells with 8-pixel blocks)
-- ✓ L2 normalization for Euclidean distance comparison
-- ✓ Consistent 128-dimensional output
-- ✓ Float32 precision for accuracy
+-  Histogram equalization for better lighting invariance
+-  Proper HOG configuration (64×64 cells with 8-pixel blocks)
+-  L2 normalization for Euclidean distance comparison
+-  Consistent 128-dimensional output
+-  Float32 precision for accuracy
 
 #### 2. Real Face Matching Algorithm
 ```python
@@ -88,11 +88,11 @@ def recognize_face(self, frame, face_location):
 ```
 
 **Key improvements:**
-- ✓ Actual distance-based comparison (not placeholder)
-- ✓ Loops through ALL registered faces
-- ✓ Returns meaningful confidence score
-- ✓ Configurable threshold (0.7)
-- ✓ Proper person_id tracking
+-  Actual distance-based comparison (not placeholder)
+-  Loops through ALL registered faces
+-  Returns meaningful confidence score
+-  Configurable threshold (0.7)
+-  Proper person_id tracking
 
 ### Phase 2: Registration System Update
 
@@ -103,7 +103,7 @@ Updated `register_from_photos()` to extract real encodings:
 ```python
 # OLD (was using dummy random):
 for photo in photos:
-    dummy_encoding = np.random.rand(128)  # ✗ Random!
+    dummy_encoding = np.random.rand(128)  #  Random!
     engine.register_face(person_id, name, dummy_encoding)
 
 # NEW (extracts real features):
@@ -114,7 +114,7 @@ for photo in photos:
     if len(faces) > 0:
         x, y, w, h = faces[0]
         face_roi = frame[y:y+h, x:x+w]
-        encoding = engine._extract_face_features(face_roi)  # ✓ Real!
+        encoding = engine._extract_face_features(face_roi)  #  Real!
         
         if encoding is not None:
             engine.register_face(person_id, name, encoding)
@@ -178,11 +178,11 @@ python scripts/quick_test_recognition.py
 python scripts/diagnose_recognition.py
 
 # This will check:
-# ✓ Camera is available
-# ✓ Face detection working
-# ✓ Sample photos are readable
-# ✓ Recognition engine initialized
-# ✓ Database is healthy
+#  Camera is available
+#  Face detection working
+#  Sample photos are readable
+#  Recognition engine initialized
+#  Database is healthy
 ```
 
 ## Technical Details
@@ -217,8 +217,8 @@ python scripts/diagnose_recognition.py
 ### Before Fix
 ```
 Webcam shows:
-- ✓ Green box around face (detection working)
-- ✗ "Unknown" label even though registered (recognition broken)
+-  Green box around face (detection working)
+-  "Unknown" label even though registered (recognition broken)
 
 Accuracy: <10% (random matches)
 Root cause: No actual matching algorithm
@@ -227,9 +227,9 @@ Root cause: No actual matching algorithm
 ### After Fix
 ```
 Webcam shows:
-- ✓ Green box around face (detection still working)
-- ✓ Your name + confidence score (recognition now working!)
-- ✓ "advitiya (0.87)" when you're in frame
+-  Green box around face (detection still working)
+-  Your name + confidence score (recognition now working!)
+-  "advitiya (0.87)" when you're in frame
 
 Accuracy: 80-95% (real matching)
 Root cause: Fixed - now uses real face encoding + distance matching
@@ -325,7 +325,7 @@ Root cause: Fixed - now uses real face encoding + distance matching
 
 ## Key Success Criteria
 
-✅ **Achieved:**
+ **Achieved:**
 - Real face recognition algorithm implemented
 - HOG-based feature extraction working
 - Euclidean distance matching accurate
@@ -334,7 +334,7 @@ Root cause: Fixed - now uses real face encoding + distance matching
 - All test scripts passing
 - Complete documentation provided
 
-✅ **Ready for:**
+ **Ready for:**
 - API integration
 - Dashboard connection
 - Production deployment

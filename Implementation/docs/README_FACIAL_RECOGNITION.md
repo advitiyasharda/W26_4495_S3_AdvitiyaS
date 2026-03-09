@@ -1,12 +1,12 @@
 # Door Face Panels - Facial Recognition System
 
-## Status: ✅ WORKING
+## Status:  WORKING
 
 Your facial recognition system is **fully functional** and ready to use.
 
 ---
 
-## 🚀 Quick Start (5 Minutes)
+##  Quick Start (5 Minutes)
 
 ### 1. Capture Your Face
 ```bash
@@ -24,13 +24,13 @@ Select **Option 2**: Register from captured photos
 ```bash
 python scripts/quick_test_recognition.py
 ```
-Expected result: **>80% accuracy** ✓
+Expected result: **>80% accuracy** 
 
 **Done!** Your facial recognition is now working.
 
 ---
 
-## 📚 Documentation Map
+##  Documentation Map
 
 | Document | Purpose | Read When |
 |----------|---------|-----------|
@@ -42,7 +42,7 @@ Expected result: **>80% accuracy** ✓
 
 ---
 
-## 🔧 Tools & Utilities
+##  Tools & Utilities
 
 ### Testing Scripts
 - **scripts/quick_test_recognition.py** - Main testing tool (photo + webcam)
@@ -58,26 +58,26 @@ Expected result: **>80% accuracy** ✓
 
 ### API & Core
 - **main.py** - Flask API server
-- **api/facial_recognition.py** - Core recognition engine (FIXED ✓)
+- **api/facial_recognition.py** - Core recognition engine (FIXED )
 - **api/threat_detection.py** - Threat detection
 - **models/anomaly_detection.py** - Anomaly detection
 
 ---
 
-## ✅ What's Working
+##  What's Working
 
-- ✓ Face detection (Haar Cascade)
-- ✓ Face feature extraction (HOG - 128-dim)
-- ✓ Face matching (Euclidean distance)
-- ✓ Real-time recognition (30 FPS capable)
-- ✓ Photo-based testing
-- ✓ Webcam recognition
-- ✓ Database logging
-- ✓ API endpoints
+-  Face detection (Haar Cascade)
+-  Face feature extraction (HOG - 128-dim)
+-  Face matching (Euclidean distance)
+-  Real-time recognition (30 FPS capable)
+-  Photo-based testing
+-  Webcam recognition
+-  Database logging
+-  API endpoints
 
 ---
 
-## 🐛 What Was Fixed
+##  What Was Fixed
 
 ### The Problem
 "I captured my face but the system doesn't recognize me"
@@ -102,11 +102,11 @@ Expected result: **>80% accuracy** ✓
    - Stores actual face data instead of random values
 
 ### The Result
-**Now achieves 80-95% recognition accuracy** ✓
+**Now achieves 80-95% recognition accuracy** 
 
 ---
 
-## 🎯 How It Works
+##  How It Works
 
 ### 3-Step Pipeline
 
@@ -139,16 +139,16 @@ Input Face Image → Resize 64×64 → Histogram Equalization
 ```
 Test Face Encoding [0.45, 0.32, ...] 
     ↓
-Compare to Person A: distance = 0.08 ✓ MATCH!
-Compare to Person B: distance = 0.65 ✗ No match
-Compare to Person C: distance = 0.85 ✗ No match
+Compare to Person A: distance = 0.08  MATCH!
+Compare to Person B: distance = 0.65  No match
+Compare to Person C: distance = 0.85  No match
     ↓
 Return: {person_id: "A", confidence: 0.92}
 ```
 
 ---
 
-## 📊 Performance
+##  Performance
 
 | Metric | Value |
 |--------|-------|
@@ -163,7 +163,7 @@ Return: {person_id: "A", confidence: 0.92}
 
 ---
 
-## 🎬 Getting Started (Step-by-Step)
+##  Getting Started (Step-by-Step)
 
 ### Step 1: Verify Camera Works
 ```bash
@@ -205,7 +205,7 @@ You should see your name in the webcam feed!
 
 ---
 
-## 🔍 Troubleshooting
+##  Troubleshooting
 
 ### Low Accuracy (<50%)
 **Cause**: Poor photo quality, bad lighting, few photos  
@@ -241,7 +241,7 @@ Shows which component has issues + solutions.
 
 ---
 
-## 📁 File Structure
+##  File Structure
 
 ```
 doortest/
@@ -274,7 +274,7 @@ doortest/
 │   ├── main.py (Flask server)
 │   ├── config.py
 │   ├── api/
-│   │   ├── facial_recognition.py (FIXED ✓)
+│   │   ├── facial_recognition.py (FIXED )
 │   │   ├── threat_detection.py
 │   │   └── ...
 │   ├── models/
@@ -296,7 +296,7 @@ doortest/
 
 ---
 
-## 🔗 API Integration
+##  API Integration
 
 Once testing is working, the system integrates with Flask API:
 
@@ -319,9 +319,9 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 
 ---
 
-## 🚢 Deployment Status
+##  Deployment Status
 
-### ✅ Completed
+###  Completed
 - Face recognition algorithm (HOG + distance matching)
 - Face capture utility
 - Face registration system
@@ -330,12 +330,12 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 - Database integration
 - API endpoints
 
-### ⚙️ In Progress
+### ️ In Progress
 - Dashboard real-time updates
 - API integration testing
 - Performance optimization
 
-### 📋 Planned (Phase 3)
+###  Planned (Phase 3)
 - Raspberry Pi deployment
 - Docker containerization
 - Production hardening
@@ -343,7 +343,7 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 
 ---
 
-## 🎓 Technical Summary
+##  Technical Summary
 
 ### Algorithm
 - **Detection**: Haar Cascade Classifier
@@ -367,7 +367,7 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 
 ---
 
-## 💡 Key Insights
+##  Key Insights
 
 1. **What worked before**: Face detection (Haar Cascade)
 2. **What didn't work**: Face recognition (matching)
@@ -377,29 +377,29 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 
 ---
 
-## 🤝 Team Integration
+##  Team Integration
 
 ### For Advitiya (Cybersecurity)
-- ✓ Core algorithm implemented
+-  Core algorithm implemented
 - [ ] API endpoint integration
 - [ ] Threat detection based on recognition
 - [ ] Audit logging of face matches
 
 ### For Eric (Data Science)
-- ✓ Algorithm selected (HOG)
+-  Algorithm selected (HOG)
 - [ ] Parameter tuning (distance threshold)
 - [ ] Larger dataset evaluation (90 days)
 - [ ] Optional: Deep learning upgrade (FaceNet, VGGFace)
 
 ### For Reubin (Dashboard)
-- ✓ Recognition working
+-  Recognition working
 - [ ] Dashboard API integration
 - [ ] Real-time updates
 - [ ] WebSocket for live feed
 
 ---
 
-## 📞 Support
+##  Support
 
 ### Quick Issues
 1. Check **FACIAL_RECOGNITION_QUICKSTART.md** (5 min)
@@ -429,9 +429,9 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 
 ---
 
-## 🎯 Next Actions
+##  Next Actions
 
-1. ✅ **This week**: Test your face recognition
+1.  **This week**: Test your face recognition
    ```bash
    python scripts/capture_faces.py
    python scripts/register_faces.py
@@ -459,21 +459,21 @@ curl -F "image=@photo.jpg" http://localhost:5000/api/recognize
 
 ---
 
-## ✨ Summary
+##  Summary
 
 Your facial recognition system is **now fully working**. It can:
-- ✓ Capture your face from webcam
-- ✓ Extract facial features (128-dimensional HOG vectors)
-- ✓ Recognize you from new photos/video
-- ✓ Return confidence scores
-- ✓ Log to database
-- ✓ Integrate with API
+-  Capture your face from webcam
+-  Extract facial features (128-dimensional HOG vectors)
+-  Recognize you from new photos/video
+-  Return confidence scores
+-  Log to database
+-  Integrate with API
 
-**Start here**: `python scripts/capture_faces.py` 🚀
+**Start here**: `python scripts/capture_faces.py` 
 
 ---
 
-## 📊 Success Criteria Met
+##  Success Criteria Met
 
 - [x] Face detection working (Haar Cascade)
 - [x] Face feature extraction working (HOG)
@@ -486,7 +486,7 @@ Your facial recognition system is **now fully working**. It can:
 - [x] Complete documentation provided
 - [x] API ready for integration
 
-✅ **SYSTEM READY FOR DEPLOYMENT** ✅
+ **SYSTEM READY FOR DEPLOYMENT** 
 
 ---
 

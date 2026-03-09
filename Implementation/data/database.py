@@ -340,9 +340,20 @@ class Database:
     
     def log_anomaly(self, user_id: str, anomaly_type: str, 
                    anomaly_score: float, description: str = '') -> bool:
-        """Log detected anomaly"""
+        """Log detected anomaly.
+
+        Works for ANY person in frame — registered or unknown.
+        If user_id does not exist in the users table, a system placeholder
+        is created automatically so the FK constraint is never violated.
+        """
         try:
             cursor = self.conn.cursor()
+            # Guarantee the user row exists so the FK never silently drops the row.
+            # INSERT OR IGNORE is a no-op if user_id already exists.
+            cursor.execute(
+                "INSERT OR IGNORE INTO users (user_id, name, role) VALUES (?, ?, ?)",
+                (user_id, user_id.replace("_", " ").title(), "system"),
+            )
             cursor.execute('''
                 INSERT INTO anomalies (user_id, anomaly_type, anomaly_score, description)
                 VALUES (?, ?, ?, ?)
@@ -353,6 +364,27 @@ class Database:
             logger.error(f"Error logging anomaly: {e}")
             return False
     
+    def get_anomalies(self, limit: int = 20, anomaly_type: str = None) -> list:
+        """Retrieve recent anomaly records, optionally filtered by type."""
+        try:
+            cursor = self.conn.cursor()
+            if anomaly_type:
+                cursor.execute(
+                    "SELECT * FROM anomalies WHERE anomaly_type = ? "
+                    "ORDER BY timestamp DESC LIMIT ?",
+                    (anomaly_type, limit),
+                )
+            else:
+                cursor.execute(
+                    "SELECT * FROM anomalies ORDER BY timestamp DESC LIMIT ?",
+                    (limit,),
+                )
+            cols = [d[0] for d in cursor.description]
+            return [dict(zip(cols, row)) for row in cursor.fetchall()]
+        except Exception as e:
+            logger.error(f"Error retrieving anomalies: {e}")
+            return []
+
     def save_behavioral_profile(self, user_id: str, profile: Dict) -> bool:
         """Save or update behavioral profile"""
         try:

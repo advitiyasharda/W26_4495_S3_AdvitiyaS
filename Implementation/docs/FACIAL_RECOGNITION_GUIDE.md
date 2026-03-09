@@ -40,11 +40,11 @@ python scripts/capture_faces.py
 - Photos saved to `data/samples/{your_name}/`
 
 **Tips for best results:**
-- ✓ Vary angles: straight, left, right, slightly up/down
-- ✓ Different lighting: natural light, artificial light, partially shadowed
-- ✓ Different distances: face should be 30-50 cm from camera
-- ✓ Different expressions: neutral, slight smile
-- ✗ Avoid: sunglasses, face masks, very harsh shadows
+-  Vary angles: straight, left, right, slightly up/down
+-  Different lighting: natural light, artificial light, partially shadowed
+-  Different distances: face should be 30-50 cm from camera
+-  Different expressions: neutral, slight smile
+-  Avoid: sunglasses, face masks, very harsh shadows
 
 **Example session:**
 ```
@@ -89,12 +89,12 @@ Available people to register:
 Choose person: 1
 
 Loading face encodings for advitiya...
-  ✓ face_001.jpg - Encoding extracted
-  ✓ face_002.jpg - Encoding extracted
+   face_001.jpg - Encoding extracted
+   face_002.jpg - Encoding extracted
   ...
-  ✓ face_015.jpg - Encoding extracted
+   face_015.jpg - Encoding extracted
 
-✓ Registered advitiya with 15 face encodings
+ Registered advitiya with 15 face encodings
 ```
 
 **What's stored:**
@@ -119,19 +119,19 @@ FACIAL RECOGNITION PIPELINE TEST
 ======================================================================
 
 [STEP 1] Checking for captured photos...
-  ✓ Found 3 people with captured photos
+   Found 3 people with captured photos
 
 [STEP 2] Loading and registering faces...
-  ✓ advitiya: 15 photos loaded
-  ✓ eric: 12 photos loaded
-  ✓ reubin: 10 photos loaded
-  ✓ Total faces registered: 37
+   advitiya: 15 photos loaded
+   eric: 12 photos loaded
+   reubin: 10 photos loaded
+   Total faces registered: 37
 
 [STEP 3] Testing recognition accuracy...
   Registered persons: 3
   Total encodings: 37
-  ✓ face_001.jpg: Expected advitiya, Got advitiya (conf: 0.892)
-  ✓ face_002.jpg: Expected advitiya, Got advitiya (conf: 0.856)
+   face_001.jpg: Expected advitiya, Got advitiya (conf: 0.892)
+   face_002.jpg: Expected advitiya, Got advitiya (conf: 0.856)
   ...
 
 [STEP 4] RESULTS
@@ -139,11 +139,11 @@ FACIAL RECOGNITION PIPELINE TEST
   Total tests: 37
   Correct: 35
   Accuracy: 94.6%
-  ✓ Recognition working well!
+   Recognition working well!
 ```
 
 **Interpretation:**
-- **>80% accuracy**: System is working well ✓
+- **>80% accuracy**: System is working well 
 - **50-80% accuracy**: System partially working (could improve with better photos)
 - **<50% accuracy**: Check photo quality and lighting
 
@@ -167,7 +167,7 @@ python scripts/quick_test_recognition.py
 ```
 LIVE WEBCAM RECOGNITION TEST
 ...
-✓ Loaded 37 face encodings
+ Loaded 37 face encodings
 
 Starting webcam...
 Press SPACE to capture test, Q to quit
@@ -230,7 +230,7 @@ python scripts/quick_test_recognition.py
 ### Problem: Webcam doesn't open
 
 ```
-✗ Cannot open webcam!
+ Cannot open webcam!
 ```
 
 **Solutions:**
@@ -248,7 +248,7 @@ python scripts/quick_test_recognition.py
 
 **Symptoms:**
 ```
-✗ No faces detected in face_001.jpg
+ No faces detected in face_001.jpg
 ```
 
 **Solutions:**
@@ -318,9 +318,9 @@ For each test face:
 - Memory usage: **~1MB per 1000 encodings**
 
 ### Hardware Compatibility
-- ✓ Laptop/Desktop (Windows, Linux, Mac)
-- ✓ Raspberry Pi 4 (with optimization)
-- ✓ Edge devices (single-board computers)
+-  Laptop/Desktop (Windows, Linux, Mac)
+-  Raspberry Pi 4 (with optimization)
+-  Edge devices (single-board computers)
 
 ---
 
@@ -355,8 +355,8 @@ doortest/
 
 ## Next Steps
 
-1. ✅ Capture and register your face
-2. ✅ Test recognition accuracy
+1.  Capture and register your face
+2.  Test recognition accuracy
 3. ⬜ Integrate with Flask API (`/api/recognize` endpoint)
 4. ⬜ Connect to dashboard for real-time monitoring
 5. ⬜ Deploy to Raspberry Pi for edge processing

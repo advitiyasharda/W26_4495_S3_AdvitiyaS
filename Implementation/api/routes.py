@@ -111,6 +111,42 @@ def recognize_face():
                 confidence=float(conf),
                 status="success",
             )
+
+            # --- Threat Detection ---
+            try:
+                threat_detector = current_app.threat_detector
+                access_type_val = "entry"  # all /recognize calls are entries
+                # Wandering check (only meaningful for exits — kept here for future exit endpoint)
+                wandering = threat_detector.check_wandering(db_user_id, access_type_val)
+                if wandering:
+                    db.log_threat(
+                        wandering["threat_type"],
+                        wandering["severity"],
+                        user_id=db_user_id,
+                        message=wandering["message"],
+                    )
+                # Tailgating check
+                tailgating = threat_detector.check_tailgating(db_user_id, db)
+                if tailgating:
+                    db.log_threat(
+                        tailgating["threat_type"],
+                        tailgating["severity"],
+                        user_id=db_user_id,
+                        message=tailgating["message"],
+                    )
+                # Unusual time check (already exists, just needs calling)
+                unusual = threat_detector.check_unusual_access_time(db_user_id)
+                if unusual:
+                    db.log_threat(
+                        unusual["threat_type"],
+                        unusual["severity"],
+                        user_id=db_user_id,
+                        message=unusual["message"],
+                    )
+            except Exception as e:
+                logger.warning("Threat detection skipped: %s", e)
+            # --- End Threat Detection ---
+
             db.log_audit(
                 "ACCESS_GRANTED",
                 user_id=db_user_id,
@@ -320,8 +356,18 @@ def get_access_logs():
 def get_statistics():
     """Get system statistics and analytics"""
     try:
-        db_stats = get_db().get_database_stats()
-        
+        db = get_db()
+        db_stats = db.get_database_stats()
+
+        fall_count_today = 0
+        try:
+            from datetime import date
+            rows = db.get_anomalies(limit=200, anomaly_type="fall_detected")
+            today_str = date.today().isoformat()
+            fall_count_today = sum(1 for r in rows if str(r.get("timestamp", "")).startswith(today_str))
+        except Exception:
+            pass
+
         stats = {
             'facial_recognition': {
                 'total_persons': db_stats.get('total_users', 0),
@@ -335,6 +381,9 @@ def get_statistics():
             'threats': {
                 'active_alerts': db_stats.get('active_threats', 0),
                 'total_threats': 0
+            },
+            'falls': {
+                'today': fall_count_today
             },
             'system': {
                 'uptime_hours': 0,

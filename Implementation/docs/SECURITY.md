@@ -335,10 +335,10 @@ CORS(app, resources={
 ### SQL Injection Prevention
 
 ```python
-# ✅ SAFE: Using parameterized queries
+#  SAFE: Using parameterized queries
 cursor.execute('SELECT * FROM users WHERE user_id = ?', (user_id,))
 
-# ❌ UNSAFE: String concatenation
+#  UNSAFE: String concatenation
 cursor.execute(f'SELECT * FROM users WHERE user_id = {user_id}')
 ```
 

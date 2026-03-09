@@ -50,7 +50,7 @@ class SystemIntegrationTest:
             self.db.add_user(person_id, name, 'resident' if 'resident' in person_id else 'caregiver')
             self.face_engine.register_face(person_id, name, None)
         
-        print(f"✓ Registered {len(residents)} users")
+        print(f"[OK] Registered {len(residents)} users")
         
         # Simulate access events
         print("\n[Simulation] Creating 20 realistic access events...")
@@ -73,7 +73,7 @@ class SystemIntegrationTest:
                 'success'
             )
             self.threat_detector.log_access_attempt(event['person_id'], True)
-            print(f"  └─ Access Logged ✓")
+            print(f"  └─ Access Logged [OK]")
             
             # Step 3: Anomaly Detection
             anomaly_result = self.anomaly_detector.predict_anomaly(event)
@@ -86,7 +86,7 @@ class SystemIntegrationTest:
                     'Unusual access pattern detected'
                 )
             else:
-                print(f"  └─ Normal Pattern ✓")
+                print(f"  └─ Normal Pattern [OK]")
             
             # Step 4: Threat Detection
             threats = []
@@ -104,7 +104,7 @@ class SystemIntegrationTest:
             
             if threats:
                 for threat in threats:
-                    print(f"  └─ 🚨 Threat: {threat['threat_type']} ({threat['severity']})")
+                    print(f"  └─ [ALERT] Threat: {threat['threat_type']} ({threat['severity']})")
                     self.db.log_threat(
                         threat['threat_type'],
                         threat['severity'],
@@ -112,7 +112,7 @@ class SystemIntegrationTest:
                         threat['message']
                     )
             else:
-                print(f"  └─ No Threats ✓")
+                print(f"  └─ No Threats [OK]")
             
             print()
         
@@ -236,7 +236,7 @@ class SystemIntegrationTest:
         print(f"  100 checks: {elapsed:.3f}s")
         print(f"  Average latency: {avg_time:.1f}ms")
         
-        print("\n✓ All components responding within acceptable latency")
+        print("\n[OK] All components responding within acceptable latency")
 
 if __name__ == '__main__':
     import sys

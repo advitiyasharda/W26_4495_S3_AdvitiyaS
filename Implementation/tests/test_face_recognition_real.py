@@ -56,11 +56,11 @@ def test_recognition_with_webcam():
                                 if encoding is not None:
                                     engine.register_face(person_name, person_name, encoding)
                                     registered_people.append(person_name)
-                                    print(f"    ✓ Loaded {photo_path.name}")
+                                    print(f"    [OK] Loaded {photo_path.name}")
                         except Exception as e:
-                            print(f"    ✗ Error: {e}")
+                            print(f"    [FAIL] Error: {e}")
     
-    print(f"\n✓ Loaded {len(engine.known_faces)} registered people")
+    print(f"\n[OK] Loaded {len(engine.known_faces)} registered people")
     
     # Test with webcam
     print("\n" + "=" * 70)
@@ -182,7 +182,7 @@ def test_recognition_with_photos():
                     except Exception as e:
                         print(f"Error: {e}")
     
-    print(f"✓ Loaded {len(engine.known_faces)} registered people\n")
+    print(f"[OK] Loaded {len(engine.known_faces)} registered people\n")
     
     # Test recognition on photos
     print("Testing recognition on sample photos...\n")
@@ -218,9 +218,9 @@ def test_recognition_with_photos():
                     
                     if is_correct:
                         correct += 1
-                        status = "✓"
+                        status = "[OK]"
                     else:
-                        status = "✗"
+                        status = "[FAIL]"
                     
                     print(f"  {status} {photo_path.name}: {result['name']} ({result['confidence']:.2f})")
             except Exception as e:

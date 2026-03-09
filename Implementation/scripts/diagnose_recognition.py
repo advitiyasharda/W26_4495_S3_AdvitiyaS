@@ -22,16 +22,16 @@ def diagnose_capture():
     print("\n[1] Checking camera...")
     cap = cv2.VideoCapture(0)
     if cap.isOpened():
-        print("  ✓ Camera is available")
+        print("  [OK] Camera is available")
         ret, frame = cap.read()
         if ret:
-            print(f"  ✓ Camera is working")
-            print(f"  ✓ Frame resolution: {frame.shape[1]}x{frame.shape[0]}")
+            print(f"  [OK] Camera is working")
+            print(f"  [OK] Frame resolution: {frame.shape[1]}x{frame.shape[0]}")
         else:
-            print("  ✗ Camera not responding")
+            print("  [FAIL] Camera not responding")
         cap.release()
     else:
-        print("  ✗ Camera not found!")
+        print("  [FAIL] Camera not found!")
         print("  Solutions:")
         print("    - Check camera is connected")
         print("    - Restart terminal")
@@ -63,9 +63,9 @@ def diagnose_capture():
     cap.release()
     
     if detected:
-        print(f"  ✓ Face detection working ({faces_found}/150 frames)")
+        print(f"  [OK] Face detection working ({faces_found}/150 frames)")
     else:
-        print("  ✗ No faces detected in 150 frames")
+        print("  [FAIL] No faces detected in 150 frames")
         print("  Solutions:")
         print("    - Get closer to camera")
         print("    - Improve lighting")
@@ -83,7 +83,7 @@ def diagnose_samples():
     sample_dir = Path('data/samples')
     
     if not sample_dir.exists():
-        print("  ✗ No sample directory found!")
+        print("  [FAIL] No sample directory found!")
         print("  Please run: python scripts/capture_faces.py")
         return False
     
@@ -112,13 +112,13 @@ def diagnose_samples():
         for photo in photos:
             frame = cv2.imread(str(photo))
             if frame is None:
-                print(f"      ✗ {photo.name}: Cannot read")
+                print(f"      [FAIL] {photo.name}: Cannot read")
                 continue
             
             faces = engine.detect_faces(frame)
             
             if len(faces) == 0:
-                print(f"      ✗ {photo.name}: No face detected")
+                print(f"      [FAIL] {photo.name}: No face detected")
                 continue
             
             photos_with_faces += 1
@@ -130,16 +130,16 @@ def diagnose_samples():
             
             if encoding is not None:
                 photos_extractable += 1
-                print(f"      ✓ {photo.name}: OK (64x64, 128-dim vector)")
+                print(f"      [OK] {photo.name}: OK (64x64, 128-dim vector)")
             else:
-                print(f"      ⚠ {photo.name}: Feature extraction failed")
+                print(f"      [!] {photo.name}: Feature extraction failed")
         
         total_photos += len(photos)
         total_with_faces += photos_with_faces
         total_extractable += photos_extractable
         
-        print(f"    ✓ Readable: {photos_with_faces}/{len(photos)}")
-        print(f"    ✓ Extractable: {photos_extractable}/{len(photos)}")
+        print(f"    [OK] Readable: {photos_with_faces}/{len(photos)}")
+        print(f"    [OK] Extractable: {photos_extractable}/{len(photos)}")
     
     print(f"\n[2] Summary:")
     print(f"  Total photos: {total_photos}")
@@ -147,10 +147,10 @@ def diagnose_samples():
     print(f"  Ready for registration: {total_extractable}")
     
     if total_extractable > 0:
-        print(f"  ✓ Ready to register!")
+        print(f"  [OK] Ready to register!")
         return True
     else:
-        print(f"  ✗ No usable photos")
+        print(f"  [FAIL] No usable photos")
         print("  Solutions:")
         print("    - Recapture with better lighting")
         print("    - Ensure faces are clearly visible")
@@ -202,12 +202,12 @@ def diagnose_recognition():
                 continue
     
     stats = engine.get_recognition_stats()
-    print(f"  ✓ Loaded {stats['total_persons']} people")
-    print(f"  ✓ Total encodings: {stats['total_face_encodings']}")
-    print(f"  ✓ Confidence threshold: {stats['confidence_threshold']}")
+    print(f"  [OK] Loaded {stats['total_persons']} people")
+    print(f"  [OK] Total encodings: {stats['total_face_encodings']}")
+    print(f"  [OK] Confidence threshold: {stats['confidence_threshold']}")
     
     if total_loaded == 0:
-        print("  ✗ No encodings loaded!")
+        print("  [FAIL] No encodings loaded!")
         return False
     
     print("\n[2] Testing recognition on self...")
@@ -235,22 +235,22 @@ def diagnose_recognition():
             if best_match == person_name:
                 person_correct += 1
                 correct += 1
-                print(f"  ✓ {person_name} test {idx+1}: Recognized (dist: {best_distance:.3f})")
+                print(f"  [OK] {person_name} test {idx+1}: Recognized (dist: {best_distance:.3f})")
             else:
-                print(f"  ✗ {person_name} test {idx+1}: Confused with {best_match} (dist: {best_distance:.3f})")
+                print(f"  [FAIL] {person_name} test {idx+1}: Confused with {best_match} (dist: {best_distance:.3f})")
     
     if total > 0:
         accuracy = 100 * correct / total
         print(f"\n[3] Recognition Accuracy: {accuracy:.0f}%")
         
         if accuracy >= 80:
-            print("  ✓ Recognition working well!")
+            print("  [OK] Recognition working well!")
             return True
         elif accuracy >= 50:
-            print("  ⚠ Recognition partially working")
+            print("  [!] Recognition partially working")
             return True
         else:
-            print("  ✗ Recognition not working")
+            print("  [FAIL] Recognition not working")
             return False
     
     return False
@@ -267,17 +267,17 @@ def diagnose_database():
         stats = db.get_database_stats()
         
         print("\n[1] Database Connection")
-        print("  ✓ Database connected")
+        print("  [OK] Database connected")
         
         print("\n[2] Tables")
         for table, count in stats.items():
             if isinstance(count, int):
-                print(f"  ✓ {table}: {count} records")
+                print(f"  [OK] {table}: {count} records")
         
-        print("\n  ✓ Database healthy")
+        print("\n  [OK] Database healthy")
         return True
     except Exception as e:
-        print(f"  ✗ Database error: {e}")
+        print(f"  [FAIL] Database error: {e}")
         return False
 
 def main():
@@ -310,18 +310,18 @@ def main():
     print("="*70)
     
     for check, passed in results.items():
-        status = "✓ PASS" if passed else "✗ FAIL"
+        status = "[OK] PASS" if passed else "[FAIL] FAIL"
         print(f"{check.upper():20} {status}")
     
     all_passed = all(results.values())
     
     if all_passed:
-        print("\n✓ ALL CHECKS PASSED!")
+        print("\n[OK] ALL CHECKS PASSED!")
         print("\nYou can now use:")
         print("  python scripts/quick_test_recognition.py")
         print("  python tests/test_integration.py")
     else:
-        print("\n⚠ Some checks failed. Review output above for solutions.")
+        print("\n[!] Some checks failed. Review output above for solutions.")
     
     return all_passed
 

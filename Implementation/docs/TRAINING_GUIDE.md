@@ -50,12 +50,12 @@ python scripts/train_anomaly_detection.py
 
 **What happens:**
 ```
-✓ Generates 2,000-3,000 synthetic access events
-✓ Trains model on normal vs anomalous patterns
-✓ Shows performance metrics:
+ Generates 2,000-3,000 synthetic access events
+ Trains model on normal vs anomalous patterns
+ Shows performance metrics:
    - Accuracy, Precision, Recall, F1-Score
-✓ Saves trained model: models/isolation_forest.pkl
-✓ Tests real-time predictions
+ Saves trained model: models/isolation_forest.pkl
+ Tests real-time predictions
 ```
 
 **Expected Performance:**

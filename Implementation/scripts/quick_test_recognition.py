@@ -31,7 +31,7 @@ def test_pipeline(person_name_filter=None):
     # Step 1: Check for sample photos
     print("\n[STEP 1] Checking for captured photos...")
     if not sample_dir.exists():
-        print("  ✗ No sample photos found!")
+        print("  [FAIL] No sample photos found!")
         print("  Please run: python scripts/capture_faces.py")
         return False
     
@@ -41,12 +41,12 @@ def test_pipeline(person_name_filter=None):
         person_dirs = [d for d in person_dirs if d.name == person_name_filter]
         if not person_dirs:
             available = [d.name for d in sample_dir.iterdir() if d.is_dir()]
-            print(f"  ✗ No folder found for '{person_name_filter}' in data/samples/")
+            print(f"  [FAIL] No folder found for '{person_name_filter}' in data/samples/")
             print(f"     Available: {available}")
             return False
-        print(f"  ✓ Testing only: {person_name_filter}")
+        print(f"  [OK] Testing only: {person_name_filter}")
     else:
-        print(f"  ✓ Found {len(person_dirs)} people with captured photos")
+        print(f"  [OK] Found {len(person_dirs)} people with captured photos")
     
     # Step 2: Register faces from photos
     print("\n[STEP 2] Loading and registering faces...")
@@ -84,12 +84,12 @@ def test_pipeline(person_name_filter=None):
                 print(f"    Error with {photo_path.name}: {e}")
                 continue
         
-        print(f"  ✓ {person_name}: {loaded} photos loaded")
+        print(f"  [OK] {person_name}: {loaded} photos loaded")
     
-    print(f"  ✓ Total faces registered: {total_loaded}")
+    print(f"  [OK] Total faces registered: {total_loaded}")
     
     if total_loaded == 0:
-        print("  ✗ No faces could be loaded from photos!")
+        print("  [FAIL] No faces could be loaded from photos!")
         return False
     
     # Step 3: Test recognition on stored photos
@@ -130,15 +130,15 @@ def test_pipeline(person_name_filter=None):
                 if result['person_id'] == person_name:
                     person_correct += 1
                     correct += 1
-                    symbol = "✓"
+                    symbol = "[OK]"
                 else:
-                    symbol = "✗"
+                    symbol = "[FAIL]"
                 
                 print(f"  {symbol} {photo_path.name}: "
                       f"Expected {person_name}, Got {result['name']} "
                       f"(conf: {result['confidence']:.3f})")
             except Exception as e:
-                print(f"  ✗ Error: {e}")
+                print(f"  [FAIL] Error: {e}")
                 continue
         
         if person_total > 0:
@@ -155,24 +155,24 @@ def test_pipeline(person_name_filter=None):
         print(f"  Accuracy: {accuracy:.1f}%")
         
         if accuracy >= 80:
-            print("  ✓ Recognition working well!")
+            print("  [OK] Recognition working well!")
             return True
         elif accuracy >= 50:
-            print("  ⚠ Recognition partially working (accuracy could be better)")
+            print("  [!] Recognition partially working (accuracy could be better)")
             print("  Tips:")
             print("    - Capture photos with varied angles/lighting")
             print("    - Ensure good face visibility in photos")
             print("    - Consider capturing 15-20 photos per person")
             return True
         else:
-            print("  ✗ Recognition not working well")
+            print("  [FAIL] Recognition not working well")
             print("  Troubleshooting:")
             print("    - Check photo quality and face visibility")
             print("    - Try different lighting conditions")
             print("    - Delete photos and recapture with better angles")
             return False
     else:
-        print("  ✗ No photos could be tested")
+        print("  [FAIL] No photos could be tested")
         return False
 
 def test_webcam_recognition():
@@ -218,14 +218,14 @@ def test_webcam_recognition():
             except:
                 continue
     
-    print(f"✓ Loaded {total_loaded} face encodings")
+    print(f"[OK] Loaded {total_loaded} face encodings")
     
     print("\nStarting webcam...")
     print("Press SPACE to capture test, Q to quit")
     
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        print("✗ Cannot open webcam!")
+        print("[FAIL] Cannot open webcam!")
         return
     
     captured_faces = []
@@ -272,7 +272,7 @@ def test_webcam_recognition():
         cap.release()
         cv2.destroyAllWindows()
     
-    print(f"\n✓ Test complete! Captured {len(captured_faces)} frames")
+    print(f"\n[OK] Test complete! Captured {len(captured_faces)} frames")
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Test facial recognition pipeline')

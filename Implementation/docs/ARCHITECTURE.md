@@ -47,7 +47,7 @@ FacialRecognitionEngine
 │   └─ Uses: Haar Cascade Classifier
 │   └─ Returns: (x, y, w, h) bounding boxes
 │
-├── recognize_face()  [FIXED ✓]
+├── recognize_face()  [FIXED ]
 │   ├─ Extract test encoding
 │   ├─ Compare to known_faces
 │   ├─ Calculate Euclidean distance
@@ -56,7 +56,7 @@ FacialRecognitionEngine
 ├── register_face()
 │   └─ Store encoding for person_id
 │
-└── _extract_face_features()  [FIXED ✓]
+└── _extract_face_features()  [FIXED ]
     ├─ Resize to 64×64
     ├─ Apply histogram equalization
     ├─ Extract HOG descriptor
@@ -131,8 +131,8 @@ For Each Registered Person:
      │
      ↓
 Distance < 0.7?
-├─ YES: Match found → Return person_id ✓
-└─ NO: Unknown person → Return None ✗
+├─ YES: Match found → Return person_id 
+└─ NO: Unknown person → Return None 
      │
      ↓
 Output: {person_id, name, confidence, timestamp}
@@ -203,9 +203,9 @@ Encodings: 3         Encodings: 2          Encodings: 4
     │                    │                     │
     ↓                    ↓                     ↓
 Distance to:         Distance to:          Distance to:
-enc_a1: 0.08        enc_b1: 0.52          enc_c1: 0.03 ✓
-enc_a2: 0.12        enc_b2: 0.48          enc_c2: 0.05 ✓
-enc_a3: 0.09        enc_b3: X             enc_c3: 0.04 ✓
+enc_a1: 0.08        enc_b1: 0.52          enc_c1: 0.03 
+enc_a2: 0.12        enc_b2: 0.48          enc_c2: 0.05 
+enc_a3: 0.09        enc_b3: X             enc_c3: 0.04 
 │                   │                     enc_c4: 0.09
 min: 0.08           min: 0.48              │
 │                   │                     min: 0.03
@@ -213,7 +213,7 @@ min: 0.08           min: 0.48              │
         BEST MATCH: PERSON C
         Distance: 0.03
         Confidence: 1 - (0.03/1.0) = 0.97 (97%)
-        Status: RECOGNIZED ✓
+        Status: RECOGNIZED 
 
         Threshold check: 0.03 < 0.7? YES → MATCH!
         
@@ -278,15 +278,15 @@ Number of People  | Comparison Time
 def recognize_face(self, frame, face_location):
     # Just returned random results
     return {
-        'person_id': random_choice(),  ✗ WRONG!
+        'person_id': random_choice(),   WRONG!
         'name': 'Unknown',
-        'confidence': random(),         ✗ FAKE!
+        'confidence': random(),          FAKE!
         'timestamp': now()
     }
 
 def register_face(self, person_id, name, encoding):
     # Ignored the encoding, used random instead
-    dummy = np.random.rand(128)        ✗ DUMMY DATA!
+    dummy = np.random.rand(128)         DUMMY DATA!
     store(dummy)
 ```
 
@@ -310,15 +310,15 @@ def recognize_face(self, frame, face_location):
     is_match = best_distance < 0.7
     
     return {
-        'person_id': best_match if is_match else None,  ✓ REAL!
+        'person_id': best_match if is_match else None,   REAL!
         'name': name if is_match else 'Unknown',
-        'confidence': confidence,                        ✓ REAL!
+        'confidence': confidence,                         REAL!
         'timestamp': datetime.now().isoformat()
     }
 
 def register_face(self, person_id, name, encoding):
     # Use the real encoding passed in
-    self.known_faces[person_id].append(encoding)       ✓ REAL DATA!
+    self.known_faces[person_id].append(encoding)        REAL DATA!
 ```
 
 ---
@@ -330,27 +330,27 @@ def register_face(self, person_id, name, encoding):
 Scenario 1: Same Person, Multiple Photos
 Input:  photo_001.jpg, photo_002.jpg, photo_003.jpg
 Expected: All recognized as same person
-Result: ✓ PASS (avg distance: 0.08)
+Result:  PASS (avg distance: 0.08)
 
 Scenario 2: Different People
 Input:  person_a.jpg, person_b.jpg, person_c.jpg
 Expected: Recognized as different people
-Result: ✓ PASS (min distance between people: 0.45)
+Result:  PASS (min distance between people: 0.45)
 
 Scenario 3: Unknown Person
 Input:  stranger.jpg
 Expected: Not recognized
-Result: ✓ PASS (distance: 0.92, threshold: 0.7)
+Result:  PASS (distance: 0.92, threshold: 0.7)
 
 Scenario 4: Poor Lighting
 Input:  photo_dark.jpg
 Expected: Still recognized (with lower confidence)
-Result: ✓ PASS (distance: 0.38, confidence: 0.62)
+Result:  PASS (distance: 0.38, confidence: 0.62)
 
 Scenario 5: Different Angle
 Input:  photo_sideways.jpg
 Expected: Recognized but lower confidence
-Result: ✓ PASS (distance: 0.25, confidence: 0.75)
+Result:  PASS (distance: 0.25, confidence: 0.75)
 ```
 
 ### Accuracy Metrics

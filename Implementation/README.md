@@ -107,14 +107,20 @@ Implementation/
 ├── models/                          # ML models
 │   ├── anomaly_detection.py         # Isolation Forest anomaly detector
 │   ├── isolation_forest.pkl         # Trained Isolation Forest model artifact
-│   ├── fall_detection.py            # FallDetector class (MediaPipe rules-based)
-│   └── pose_landmarker.task         # MediaPipe pre-trained pose skeleton model
+│   ├── fall_detection.py            # FallDetector (Phase 1 rules) + LSTMFallDetector (Phase 2)
+│   ├── pose_landmarker.task         # MediaPipe pre-trained pose skeleton model (download separately)
+│   ├── fall_lstm.keras              # Trained LSTM fall detection model (93% accuracy)
+│   └── fall_lstm_scaler.pkl         # Feature scaler for LSTM model
 │
 ├── data/                            # Data layer
 │   ├── database.py                  # SQLite manager (all DB read/write operations)
 │   ├── data_generator.py            # Synthetic training data generator
 │   ├── doorface.db                  # SQLite database (auto-created, gitignored)
 │   ├── synthetic_dataset.csv        # Generated training data for anomaly model
+│   ├── keypoints/                   # Extracted MediaPipe keypoints from URFD videos (CSVs)
+│   ├── urfd/                        # URFD dataset videos — download separately, gitignored
+│   │   ├── Fall/                    # 30 fall videos (fall-01-cam0.mp4 ... fall-30-cam0.mp4)
+│   │   └── Activities of Daily Living/  # 40 ADL videos
 │   └── samples/                     # Captured face photos per person
 │       └── {person_name}/
 │           └── *.jpg / *.png
@@ -144,7 +150,8 @@ Implementation/
 │   └── package.json
 │
 ├── scripts/                         # Utility scripts (run from project root)
-│   ├── fall_detection_camera.py     # Live webcam fall detection (Phase 1)
+│   ├── fall_detection_camera.py     # Live webcam fall detection (Phase 1 rules or Phase 2 LSTM)
+│   ├── extract_keypoints.py         # Extract MediaPipe keypoints from URFD videos → CSVs
 │   ├── capture_faces.py             # Capture face photos from webcam
 │   ├── register_faces.py            # Register faces into DB + extract encodings
 │   ├── clear_database.py            # Reset the SQLite DB (preserves samples/)
@@ -185,9 +192,11 @@ Implementation/
 
 | Tool    | Version | Download                |
 |---------|---------|-------------------------|
-| Python  | 3.9+    | https://www.python.org  |
+| Python  | 3.11+   | https://www.python.org  |
 | Node.js | 18+ LTS | https://nodejs.org      |
 | npm     | 9+      | Included with Node.js   |
+
+> **Mac users:** Install Python 3.11 via Homebrew for best results: `brew install python@3.11`
 
 ### 1. Backend (Flask API)
 
@@ -297,7 +306,31 @@ MediaPipe extracts 33 body skeleton landmarks per frame. Three rules are scored 
 
 When combined confidence ≥ 0.55 → fall is declared and sent to the dashboard.
 
-> **Phase 2 (planned):** LSTM model trained on the UR Fall Detection dataset for higher accuracy across diverse fall types.
+> **Phase 2 (in progress):** LSTM model trained on the UR Fall Detection dataset. See below for setup instructions.
+
+### Fall Detection Phase 2 — LSTM Setup
+
+Phase 2 uses a trained LSTM model for higher accuracy fall detection (~93% on test set).
+
+**Step 1 — Download the URFD dataset videos**
+
+Go to [https://fenix.ur.edu.pl/mkepski/ds/uf.html](https://fenix.ur.edu.pl/mkepski/ds/uf.html) and download:
+- All **Fall** sequences → Video column → cam0 (30 videos)
+- All **ADL** sequences → Video column → cam0 (40 videos)
+
+Place them into:
+```
+data/urfd/Fall/          ← fall-01-cam0.mp4 ... fall-30-cam0.mp4
+data/urfd/Activities of Daily Living/   ← adl-01-cam0.mp4 ... adl-40-cam0.mp4
+```
+
+**Step 2 — Extract keypoints from all 70 videos**
+```bash
+python3.11 scripts/extract_keypoints.py
+```
+This runs MediaPipe Pose on every frame and saves 66 keypoints per frame to `data/keypoints/` (takes 5–15 mins).
+
+---
 
 ### Diagnostics
 
@@ -452,7 +485,8 @@ FaceDoor is designed with **PIPEDA** (Canada) and **GDPR** compliance in mind:
 
 | Script                                | Purpose                                                    |
 |---------------------------------------|------------------------------------------------------------|
-| `scripts/fall_detection_camera.py`    | Live webcam fall detection — posts falls to dashboard via `/api/fall/log` |
+| `scripts/fall_detection_camera.py`    | Live webcam fall detection — Phase 1 rules or Phase 2 LSTM (`--lstm` flag) |
+| `scripts/extract_keypoints.py`        | Extract MediaPipe pose keypoints from URFD videos → CSVs in `data/keypoints/` |
 | `scripts/capture_faces.py`            | Capture face photos from webcam for registration           |
 | `scripts/register_faces.py`           | Register captured photos, extract HOG features             |
 | `scripts/clear_database.py`           | Reset the SQLite DB (preserves `data/samples/`)            |

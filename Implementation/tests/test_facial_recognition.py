@@ -221,19 +221,13 @@ def integration_test():
 
 if __name__ == '__main__':
     import sys
-    
-    print("\nDoor Face Panels - Testing Options:")
-    print("1. Full facial recognition test (requires webcam)")
-    print("2. Database integration test")
-    print("3. Create sample dataset instructions")
-    
-    choice = input("\nSelect option (1-3): ").strip()
-    
-    if choice == '1':
+
+    args = sys.argv[1:]
+
+    if '--webcam' in args:
         test_facial_recognition()
-    elif choice == '2':
-        integration_test()
-    elif choice == '3':
+    elif '--dataset' in args:
         create_sample_dataset()
     else:
-        print("Invalid option")
+        # Default: database integration test only — no webcam required, CI-safe
+        integration_test()

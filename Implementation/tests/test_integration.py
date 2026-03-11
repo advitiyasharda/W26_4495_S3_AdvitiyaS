@@ -240,22 +240,15 @@ class SystemIntegrationTest:
 
 if __name__ == '__main__':
     import sys
-    
-    print("\nSystem Integration Test Options:")
-    print("1. Complete flow test (recommended)")
-    print("2. Performance benchmark")
-    print("3. Both")
-    
-    choice = input("\nSelect option (1-3): ").strip()
-    
+
+    args = sys.argv[1:]
     tester = SystemIntegrationTest()
-    
-    if choice == '1':
+
+    if '--flow' in args:
         tester.test_complete_flow()
-    elif choice == '2':
-        tester.run_benchmark()
-    elif choice == '3':
-        tester.test_complete_flow()
+    elif '--bench' in args:
         tester.run_benchmark()
     else:
-        print("Invalid option")
+        # Default: run both — safe for CI, no interactive prompt needed
+        tester.test_complete_flow()
+        tester.run_benchmark()

@@ -79,6 +79,10 @@ def parse_args():
         help="Fall confidence threshold 0–1 (default: 0.55)"
     )
     parser.add_argument(
+        "--lstm", action="store_true",
+        help="Use Phase 2 LSTM model instead of rules-based detector"
+    )
+    parser.add_argument(
         "--no-api", action="store_true",
         help="Disable posting falls to the Flask dashboard API"
     )
@@ -162,8 +166,14 @@ def log_fall_event(writer, result):
 def run(args):
     import cv2
     from models.fall_detection import FallDetector
+    from models.fall_detection_trained import LSTMFallDetector
 
-    detector = FallDetector(fall_threshold=args.threshold)
+    if args.lstm:
+        logger.info("Using Phase 2 LSTM fall detector")
+        detector = LSTMFallDetector(threshold=args.threshold)
+    else:
+        logger.info("Using Phase 1 rules-based fall detector")
+        detector = FallDetector(fall_threshold=args.threshold)
 
     cap = cv2.VideoCapture(args.camera)
     if not cap.isOpened():
@@ -246,7 +256,8 @@ def run(args):
                             (actual_w - 220, 30),
                             cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 0), 2)
 
-                cv2.imshow("Fall Detection (Phase 1 — Rules)", annotated)
+                title = "Fall Detection (Phase 2 — LSTM)" if args.lstm else "Fall Detection (Phase 1 — Rules)"
+                cv2.imshow(title, annotated)
 
                 key = cv2.waitKey(1) & 0xFF
                 if key == ord("q"):

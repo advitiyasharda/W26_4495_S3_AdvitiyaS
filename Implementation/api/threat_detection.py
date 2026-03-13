@@ -271,6 +271,77 @@ class ThreatDetector:
 
         return None
     
+    def check_repeated_falls(self, db) -> Optional[Dict]:
+        """
+        Detect repeated fall patterns over the past 24 hours.
+
+        Clinical reasoning:
+          1 fall  → accident (handled by FALL_DETECTED CRITICAL threat at detection time)
+          2 falls → HIGH     — monitor closely
+          3+ falls → CRITICAL — immediate caregiver intervention required
+
+        Args:
+            db: Database instance providing get_anomalies(limit, anomaly_type)
+
+        Returns:
+            Threat dict if a repeated-fall pattern is detected, None otherwise
+        """
+        try:
+            rows = db.get_anomalies(limit=100, anomaly_type="fall_detected")
+        except Exception:
+            return None
+
+        now = datetime.now()
+        cutoff = now - timedelta(hours=24)
+        recent_falls = []
+
+        for row in rows or []:
+            ts_raw = row.get("timestamp")
+            if not ts_raw:
+                continue
+            try:
+                ts = datetime.fromisoformat(str(ts_raw).replace("Z", ""))
+            except Exception:
+                continue
+            if ts >= cutoff:
+                recent_falls.append(ts)
+
+        count = len(recent_falls)
+
+        if count >= 3:
+            alert = {
+                "threat_type": "REPEATED_FALLS_CRITICAL",
+                "severity": ThreatLevel.CRITICAL.name,
+                "person_id": "fall_detection",
+                "fall_count": count,
+                "window_hours": 24,
+                "timestamp": now.isoformat(),
+                "message": (
+                    f"{count} falls detected in the last 24 hours — "
+                    "immediate caregiver intervention required"
+                ),
+            }
+            logger.critical(alert["message"])
+            return alert
+
+        if count == 2:
+            alert = {
+                "threat_type": "REPEATED_FALLS_WARNING",
+                "severity": ThreatLevel.HIGH.name,
+                "person_id": "fall_detection",
+                "fall_count": count,
+                "window_hours": 24,
+                "timestamp": now.isoformat(),
+                "message": (
+                    "2 falls detected in the last 24 hours — "
+                    "monitor resident closely"
+                ),
+            }
+            logger.warning(alert["message"])
+            return alert
+
+        return None
+
     def log_access_attempt(self, person_id: str, success: bool):
         """Log an access attempt"""
         status = 'success' if success else 'failed'

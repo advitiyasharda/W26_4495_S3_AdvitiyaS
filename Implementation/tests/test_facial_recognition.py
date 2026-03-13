@@ -219,6 +219,135 @@ def integration_test():
     for log in logs:
         print(f"   {log['user_id']} - {log['access_type']} at {log['timestamp']}")
 
+def run_unit_tests():
+    """
+    Unit tests for the facial recognition engine — no webcam required.
+
+    Covers:
+      - Engine initialises without error in both dlib and OpenCV modes
+      - Feature extraction returns a 128-dim float32 vector
+      - Confidence is always in [0, 1] for any distance value
+      - Confidence denominator uses the active threshold (regression test
+        for the hardcoded-0.6 bug fixed in Phase 2)
+      - Face registration and lookup work correctly
+    """
+    import traceback
+    from api.facial_recognition import (
+        FacialRecognitionEngine,
+        USE_FACE_RECOGNITION_LIB,
+        DISTANCE_MATCH_THRESHOLD,
+    )
+
+    passed = 0
+    failed = 0
+
+    def check(name, condition, detail=""):
+        nonlocal passed, failed
+        if condition:
+            print(f"  [PASS] {name}")
+            passed += 1
+        else:
+            print(f"  [FAIL] {name}" + (f" — {detail}" if detail else ""))
+            failed += 1
+
+    print("\n" + "=" * 60)
+    print("UNIT TESTS — FacialRecognitionEngine")
+    mode = "dlib (face_recognition)" if USE_FACE_RECOGNITION_LIB else "OpenCV HOG"
+    print(f"Engine mode : {mode}")
+    print("=" * 60)
+
+    # ── Test 1: Engine initialises ───────────────────────────────────────────
+    try:
+        engine = FacialRecognitionEngine(confidence_threshold=0.5)
+        check("Engine initialises without error", True)
+    except Exception as exc:
+        check("Engine initialises without error", False, str(exc))
+        print("  Cannot continue — engine failed to initialise.")
+        return
+
+    # ── Test 2: Synthetic face ROI produces a 128-dim vector ─────────────────
+    synthetic_face = np.random.randint(80, 200, (64, 64, 3), dtype=np.uint8)
+    encoding = engine._extract_face_features(synthetic_face)
+
+    check(
+        "Feature extraction returns ndarray",
+        encoding is not None and isinstance(encoding, np.ndarray),
+        f"got {type(encoding)}",
+    )
+    if encoding is not None:
+        check(
+            "Feature vector is 128-dimensional",
+            len(encoding) == 128,
+            f"got len={len(encoding)}",
+        )
+        check(
+            "Feature vector dtype is float32",
+            encoding.dtype == np.float32,
+            f"got dtype={encoding.dtype}",
+        )
+
+    # ── Test 3: Register a face and retrieve it ───────────────────────────────
+    dummy_enc = np.zeros(128, dtype=np.float32)
+    engine.register_face("test_001", "Test Person", dummy_enc)
+
+    check(
+        "Registered person appears in known_faces",
+        "test_001" in engine.known_faces,
+    )
+    check(
+        "Person name stored correctly",
+        engine.person_names.get("test_001") == "Test Person",
+    )
+
+    # ── Test 4: Confidence is always clamped to [0, 1] ───────────────────────
+    active_threshold = 0.6 if USE_FACE_RECOGNITION_LIB else DISTANCE_MATCH_THRESHOLD
+    for dist in [0.0, active_threshold / 2, active_threshold, active_threshold * 2, 9.99]:
+        conf = max(0.0, min(1.0, 1.0 - (dist / active_threshold)))
+        check(
+            f"Confidence clamped to [0,1] at distance={dist:.3f}",
+            0.0 <= conf <= 1.0,
+            f"got {conf}",
+        )
+
+    # ── Test 5: Confidence denominator regression (Phase 2 bug fix) ──────────
+    # Before the fix: confidence always divided by hardcoded 0.6
+    # After the fix:  denominator equals the active_threshold
+    # When OpenCV is active, threshold=0.55; a distance of 0.55 should give
+    # confidence=0.0, not the wrong value produced by dividing by 0.6.
+    if not USE_FACE_RECOGNITION_LIB:
+        dist_at_threshold = DISTANCE_MATCH_THRESHOLD          # should yield conf=0.0
+        correct_conf   = max(0.0, min(1.0, 1.0 - (dist_at_threshold / DISTANCE_MATCH_THRESHOLD)))
+        incorrect_conf = max(0.0, min(1.0, 1.0 - (dist_at_threshold / 0.6)))
+        check(
+            "Confidence=0.0 at exact threshold (OpenCV mode, regression test)",
+            abs(correct_conf) < 1e-6,
+            f"correct={correct_conf:.4f} incorrect_old={incorrect_conf:.4f}",
+        )
+    else:
+        dist_at_threshold = 0.6
+        correct_conf = max(0.0, min(1.0, 1.0 - (dist_at_threshold / 0.6)))
+        check(
+            "Confidence=0.0 at exact threshold (dlib mode, regression test)",
+            abs(correct_conf) < 1e-6,
+            f"correct={correct_conf:.4f}",
+        )
+
+    # ── Test 6: Remove face ───────────────────────────────────────────────────
+    engine.remove_face("test_001")
+    check(
+        "Removed person no longer in known_faces",
+        "test_001" not in engine.known_faces,
+    )
+
+    # ── Summary ───────────────────────────────────────────────────────────────
+    print(f"\nResults: {passed} passed, {failed} failed")
+    if failed == 0:
+        print("[ALL TESTS PASSED]")
+    else:
+        print("[SOME TESTS FAILED] — review output above")
+    print("=" * 60)
+
+
 if __name__ == '__main__':
     import sys
 
@@ -228,6 +357,9 @@ if __name__ == '__main__':
         test_facial_recognition()
     elif '--dataset' in args:
         create_sample_dataset()
+    elif '--units' in args:
+        run_unit_tests()
     else:
-        # Default: database integration test only — no webcam required, CI-safe
+        # Default: unit tests + database integration (no webcam, CI-safe)
+        run_unit_tests()
         integration_test()

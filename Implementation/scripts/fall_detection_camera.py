@@ -57,6 +57,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger("fall_detection_camera")
 
+# Throttle visibility warnings to API (max once per 5 seconds)
+_last_visibility_warning_posted = 0.0
+VISIBILITY_WARNING_THROTTLE_SEC = 5.0
+
 
 def parse_args():
     parser = argparse.ArgumentParser(
@@ -164,6 +168,7 @@ def log_fall_event(writer, result):
 
 
 def run(args):
+    global _last_visibility_warning_posted
     import cv2
     from models.fall_detection import FallDetector
     from models.fall_detection_trained import LSTMFallDetector
@@ -244,6 +249,16 @@ def run(args):
                     log_fall_event(csv_writer, result)
                     csv_file.flush()
 
+            # ── Handle visibility warning (body not fully visible) ───────────
+            if (
+                result
+                and "Body not fully visible" in (result.reason or "")
+                and not args.no_api
+                and (time.time() - _last_visibility_warning_posted) > VISIBILITY_WARNING_THROTTLE_SEC
+            ):
+                post_fall_to_api(result, args.api_url)
+                _last_visibility_warning_posted = time.time()
+
             # ── Draw overlay ───────────────────────────────────────────────
             if not args.no_display:
                 annotated = detector.draw_overlay(frame, result) if result else frame
@@ -269,8 +284,12 @@ def run(args):
                     cv2.imwrite(str(fname), annotated)
                     logger.info("Screenshot saved: %s", fname)
                 elif key == ord("r"):
-                    detector._hip_y_history.clear()
-                    detector._fall_cooldown_frames = 0
+                    if args.lstm:
+                        detector._buffer.clear()
+                        detector._cooldown = 0
+                    else:
+                        detector._hip_y_history.clear()
+                        detector._fall_cooldown_frames = 0
                     logger.info("Fall history reset.")
             else:
                 # Headless — just log periodically

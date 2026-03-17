@@ -29,6 +29,53 @@ def health_check():
     }), 200
 
 
+@api_bp.route("/recognition/status", methods=["GET"])
+def recognition_status():
+    """
+    Return the current state of the facial recognition engine.
+
+    Response JSON:
+        {
+          "engine_mode":         "dlib" | "opencv",
+          "dlib_version":        str | null,
+          "registered_persons":  int,
+          "total_encodings":     int,
+          "current_threshold":   float,
+          "confidence_threshold": float,
+          "timestamp":           str
+        }
+    """
+    try:
+        from api.facial_recognition import USE_FACE_RECOGNITION_LIB, DISTANCE_MATCH_THRESHOLD
+
+        engine = current_app.face_engine
+        stats  = engine.get_recognition_stats()
+
+        dlib_version = None
+        if USE_FACE_RECOGNITION_LIB:
+            try:
+                import face_recognition
+                dlib_version = getattr(face_recognition, "__version__", "installed")
+            except Exception:
+                dlib_version = "installed"
+
+        threshold = 0.6 if USE_FACE_RECOGNITION_LIB else DISTANCE_MATCH_THRESHOLD
+
+        return jsonify({
+            "engine_mode":          "dlib" if USE_FACE_RECOGNITION_LIB else "opencv",
+            "dlib_version":         dlib_version,
+            "registered_persons":   stats.get("total_persons", 0),
+            "total_encodings":      stats.get("total_face_encodings", 0),
+            "current_threshold":    threshold,
+            "confidence_threshold": engine.confidence_threshold,
+            "timestamp":            datetime.now().isoformat(),
+        }), 200
+
+    except Exception as e:
+        logger.exception("Error retrieving recognition status")
+        return jsonify({"error": str(e)}), 500
+
+
 @api_bp.route("/recognize", methods=["POST"])
 def recognize_face():
     """

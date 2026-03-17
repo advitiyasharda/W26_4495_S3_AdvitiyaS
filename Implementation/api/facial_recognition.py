@@ -121,7 +121,9 @@ class FacialRecognitionEngine:
         
         distance_threshold = 0.6 if USE_FACE_RECOGNITION_LIB else DISTANCE_MATCH_THRESHOLD
         within_threshold = bool(best_distance < distance_threshold)
-        confidence = float(max(0.0, min(1.0, 1.0 - (best_distance / 0.6))))
+        # Use the active threshold as the denominator so confidence is always
+        # relative to whichever engine (dlib or OpenCV) is actually running.
+        confidence = float(max(0.0, min(1.0, 1.0 - (best_distance / distance_threshold))))
         is_match = (
             best_match is not None
             and within_threshold

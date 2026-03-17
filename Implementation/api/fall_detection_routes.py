@@ -45,22 +45,43 @@ def _get_db():
 
 
 def _log_fall_to_db(result) -> None:
-    """Write a fall event to the anomalies table (no dashboard side-effects)."""
+    """
+    Write a fall event to the anomalies table and escalate to the
+    threats table as a CRITICAL security alert so it surfaces on the
+    main alerts dashboard alongside other threat rules.
+    """
+    description = (
+        f"Fall detected: {result.reason} | "
+        f"confidence={result.confidence:.2f} "
+        f"hip_y={result.hip_height:.3f} "
+        f"angle={result.torso_angle_deg:.1f}° "
+        f"vel={result.hip_velocity:.4f}"
+    )
     try:
         db = _get_db()
         db.log_anomaly(
             user_id="fall_detection",
             anomaly_type="fall_detected",
             anomaly_score=result.confidence,
-            description=(
-                f"Fall detected: {result.reason} | "
-                f"hip_y={result.hip_height:.3f} "
-                f"angle={result.torso_angle_deg:.1f}° "
-                f"vel={result.hip_velocity:.4f}"
-            ),
+            description=description,
         )
     except Exception as e:
-        logger.warning("Could not log fall to DB: %s", e)
+        logger.warning("Could not log fall anomaly to DB: %s", e)
+
+    try:
+        db = _get_db()
+        db.log_threat(
+            threat_type="FALL_DETECTED",
+            severity="CRITICAL",
+            user_id="fall_detection",
+            message=(
+                f"Fall detected (confidence {result.confidence:.0%}): "
+                f"{result.reason}"
+            ),
+        )
+        logger.warning("Fall escalated to CRITICAL threat — conf=%.2f", result.confidence)
+    except Exception as e:
+        logger.warning("Could not escalate fall to threats table: %s", e)
 
 
 # ── Routes ────────────────────────────────────────────────────────────────────

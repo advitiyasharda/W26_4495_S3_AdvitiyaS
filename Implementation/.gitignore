@@ -9,5 +9,15 @@ build/
 data/doorface.db
 
 # ML model artifacts (too large / binary — download separately)
-models/*.pkl
 models/*.task
+
+# Virtual environment — never commit
+venv/
+.venv/
+
+# URFD dataset videos — too large for git (300MB+)
+data/urfd/
+
+# Python cache
+__pycache__/
+*.pyc

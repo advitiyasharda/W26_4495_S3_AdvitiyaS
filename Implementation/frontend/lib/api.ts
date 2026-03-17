@@ -117,7 +117,9 @@ export interface FallEvent {
   anomaly_id: number;
   user_id: string;
   anomaly_type: string;
+  /** LSTM confidence 0–1 (maps to anomaly_score from backend) */
   anomaly_score: number;
+  /** Contains reason; check for "Body not fully visible" for visibility warnings */
   description: string;
   timestamp: string;
 }

@@ -14,9 +14,9 @@ function fmtTime(iso: string) {
 }
 
 function confidenceColor(conf: number): string {
-  if (conf > 0.7) return "bg-red-500";
-  if (conf >= 0.5) return "bg-orange-500";
-  return "bg-yellow-500";
+  if (conf > 0.8) return "bg-red-500";
+  if (conf >= 0.5) return "bg-amber-500";
+  return "bg-emerald-500";
 }
 
 export default function FallsPage() {
@@ -53,8 +53,18 @@ export default function FallsPage() {
     await refresh();
   };
 
+  const latestFall = events[0];
+  const showVisibilityBanner = latestFall?.description?.includes("Body not fully visible") ?? false;
+
   return (
     <div className="space-y-6">
+      {/* Visibility warning banner */}
+      {showVisibilityBanner && (
+        <div className="bg-amber-100 border border-amber-300 text-amber-800 px-4 py-3 rounded-lg">
+          Camera cannot see full body — ask person to step back.
+        </div>
+      )}
+
       {/* Header */}
       <div className="flex items-start justify-between">
         <div>
@@ -112,6 +122,24 @@ export default function FallsPage() {
                 {resetting ? "Resetting…" : "Reset"}
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Latest fall confidence bar */}
+      {events.length > 0 && latestFall && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+          <h2 className="text-sm font-semibold text-slate-700 mb-2">Latest Fall Confidence</h2>
+          <div className="flex items-center gap-3">
+            <div className="flex-1 h-4 bg-slate-100 rounded-full overflow-hidden">
+              <div
+                className={`h-full rounded-full transition-all ${confidenceColor(latestFall.anomaly_score)}`}
+                style={{ width: `${Math.min(100, latestFall.anomaly_score * 100)}%` }}
+              />
+            </div>
+            <span className="text-sm font-medium text-slate-600 min-w-[3rem]">
+              {Math.round(latestFall.anomaly_score * 100)}%
+            </span>
           </div>
         </div>
       )}

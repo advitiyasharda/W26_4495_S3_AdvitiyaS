@@ -76,11 +76,38 @@ class LSTMFallDetector:
                 "pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"
             )
 
+        import json
         import pickle
+        import tempfile
+        import zipfile
         import tensorflow as tf
         import mediapipe as mp
 
-        self._model = tf.keras.models.load_model(self.model_path)
+        # Workaround: Model saved with Keras 3.13+ includes quantization_config in Dense;
+        # Keras 3.10 rejects it. Patch config.json in the .keras zip to remove it.
+        model_path = Path(self.model_path)
+        with zipfile.ZipFile(model_path, "r") as zf:
+            config_bytes = zf.read("config.json")
+        config = json.loads(config_bytes)
+
+        def strip_quantization(obj):
+            if isinstance(obj, dict):
+                obj.pop("quantization_config", None)
+                for v in obj.values():
+                    strip_quantization(v)
+            elif isinstance(obj, list):
+                for v in obj:
+                    strip_quantization(v)
+
+        strip_quantization(config)
+        with tempfile.NamedTemporaryFile(suffix=".keras", delete=False) as tmp:
+            with zipfile.ZipFile(model_path, "r") as zf_in:
+                with zipfile.ZipFile(tmp.name, "w", zipfile.ZIP_DEFLATED) as zf_out:
+                    for name in zf_in.namelist():
+                        data = json.dumps(config).encode() if name == "config.json" else zf_in.read(name)
+                        zf_out.writestr(name, data)
+            self._model = tf.keras.models.load_model(tmp.name)
+            Path(tmp.name).unlink(missing_ok=True)
         with open(self.scaler_path, "rb") as f:
             self._scaler = pickle.load(f)
 
@@ -129,6 +156,19 @@ class LSTMFallDetector:
             keypoints = [0.0] * LSTM_NUM_FEATURES
 
         self._buffer.append(keypoints)
+
+        # Body visibility check — avoid false falls when only face/partial body visible
+        non_zero = sum(1 for v in keypoints if v != 0.0)
+        if non_zero < LSTM_NUM_FEATURES * 0.5:
+            return FallResult(
+                is_fall=False,
+                confidence=0.0,
+                reason="Body not fully visible — move back from camera",
+                hip_height=0.0,
+                torso_angle_deg=0.0,
+                hip_velocity=0.0,
+                landmarks_visible=False,
+            )
 
         if len(self._buffer) < self.sequence_len:
             return FallResult(

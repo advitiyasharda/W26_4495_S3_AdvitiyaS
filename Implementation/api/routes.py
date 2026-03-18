@@ -162,17 +162,11 @@ def recognize_face():
             # --- Threat Detection ---
             try:
                 threat_detector = current_app.threat_detector
-                access_type_val = "entry"  # all /recognize calls are entries
-                # Wandering check (only meaningful for exits — kept here for future exit endpoint)
-                wandering = threat_detector.check_wandering(db_user_id, access_type_val)
-                if wandering:
-                    db.log_threat(
-                        wandering["threat_type"],
-                        wandering["severity"],
-                        user_id=db_user_id,
-                        message=wandering["message"],
-                    )
-                # Tailgating check
+                # Log successful access so check_failed_access_attempts
+                # has real data from live traffic (not just tests)
+                threat_detector.log_access_attempt(db_user_id, success=True)
+
+                # Tailgating — multiple people entering within 15 s
                 tailgating = threat_detector.check_tailgating(db_user_id, db)
                 if tailgating:
                     db.log_threat(
@@ -181,7 +175,7 @@ def recognize_face():
                         user_id=db_user_id,
                         message=tailgating["message"],
                     )
-                # Unusual time check (already exists, just needs calling)
+                # Unusual time — entry between 10 PM and 5 AM
                 unusual = threat_detector.check_unusual_access_time(db_user_id)
                 if unusual:
                     db.log_threat(
@@ -190,6 +184,8 @@ def recognize_face():
                         user_id=db_user_id,
                         message=unusual["message"],
                     )
+                # NOTE: check_wandering() is for exit events only.
+                # Wire it into a dedicated /api/exit endpoint when added.
             except Exception as e:
                 logger.warning("Threat detection skipped: %s", e)
             # --- End Threat Detection ---
@@ -263,6 +259,20 @@ def recognize_face():
                     f"Confidence: {float(conf):.2f}."
                 ),
             )
+            # Track failed attempt so repeated unknown-face alerts can fire
+            try:
+                threat_detector = current_app.threat_detector
+                threat_detector.log_access_attempt(unknown_id, success=False)
+                repeated = threat_detector.check_failed_access_attempts(unknown_id)
+                if repeated:
+                    db.log_threat(
+                        repeated["threat_type"],
+                        repeated["severity"],
+                        user_id=unknown_id,
+                        message=repeated["message"],
+                    )
+            except Exception as e:
+                logger.warning("Failed-attempt check skipped: %s", e)
         return jsonify(result), 200
 
     except Exception as e:

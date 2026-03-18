@@ -29,7 +29,7 @@ from api.facial_recognition import FacialRecognitionEngine, USE_FACE_RECOGNITION
 # ── Config ───────────────────────────────────────────────────────────────────
 
 SAMPLES_DIR    = Path(__file__).resolve().parent.parent / "data" / "samples"
-CONFIG_PATH    = Path(__file__).resolve().parent.parent / "config.py"
+FR_MODULE_PATH = Path(__file__).resolve().parent.parent / "api" / "facial_recognition.py"
 THRESHOLD_STEPS = [round(v, 2) for v in np.arange(0.30, 0.81, 0.05)]
 
 DRY_RUN = "--dry-run" in sys.argv
@@ -126,33 +126,27 @@ def evaluate_threshold(engine: FacialRecognitionEngine,
 
 
 def update_config(optimal_threshold: float) -> None:
-    """Rewrite FACE_DISTANCE_MATCH_THRESHOLD in config.py."""
-    text = CONFIG_PATH.read_text(encoding="utf-8")
+    """
+    Write the calibrated value back into api/facial_recognition.py by
+    replacing the DISTANCE_MATCH_THRESHOLD constant in-place.
+    This is the constant the engine actually reads at module load time.
+    """
+    text = FR_MODULE_PATH.read_text(encoding="utf-8")
 
-    # Update the facial recognition distance threshold constant
-    # (used by facial_recognition.py at module load via config import)
-    new_line = f"FACE_RECOGNITION_DISTANCE_THRESHOLD = {optimal_threshold}"
+    updated = re.sub(
+        r"^(DISTANCE_MATCH_THRESHOLD\s*=\s*)[\d.]+",
+        rf"\g<1>{optimal_threshold}",
+        text,
+        flags=re.MULTILINE,
+    )
 
-    if "FACE_RECOGNITION_DISTANCE_THRESHOLD" in text:
-        text = re.sub(
-            r"FACE_RECOGNITION_DISTANCE_THRESHOLD\s*=\s*[\d.]+",
-            new_line,
-            text,
-        )
-    else:
-        # Append after the existing FACE_CONFIDENCE_THRESHOLD line
-        text = text.replace(
-            "FACE_CONFIDENCE_THRESHOLD",
-            "FACE_CONFIDENCE_THRESHOLD",
-        )
-        insert_after = "FACE_CONFIDENCE_THRESHOLD = 0.6"
-        text = text.replace(
-            insert_after,
-            f"{insert_after}\n{new_line}  # auto-calibrated",
-        )
+    if updated == text:
+        print(f"\n[WARN] Could not find DISTANCE_MATCH_THRESHOLD in {FR_MODULE_PATH}")
+        print("       Update it manually to:", optimal_threshold)
+        return
 
-    CONFIG_PATH.write_text(text, encoding="utf-8")
-    print(f"\n[config.py] FACE_RECOGNITION_DISTANCE_THRESHOLD updated → {optimal_threshold}")
+    FR_MODULE_PATH.write_text(updated, encoding="utf-8")
+    print(f"\n[facial_recognition.py] DISTANCE_MATCH_THRESHOLD updated → {optimal_threshold}")
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────

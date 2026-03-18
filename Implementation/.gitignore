@@ -10,6 +10,10 @@ data/doorface.db
 
 # ML model artifacts (too large / binary — download separately)
 models/*.task
+models/*.pt
+models/*.onnx
+# YOLOv8 training runs
+runs/
 
 # Virtual environment — never commit
 venv/

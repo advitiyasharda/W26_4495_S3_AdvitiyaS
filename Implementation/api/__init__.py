@@ -3,6 +3,7 @@ API Module for Door Face Panels Smart Security System
 """
 import logging
 from pathlib import Path
+import json
 
 from flask import Flask
 from flask_cors import CORS
@@ -76,12 +77,63 @@ def create_app(config_name="config"):
 
     # Initialise fall detector (stateful — one instance per server process)
     from models.fall_detection import FallDetector
+    from models.fall_detection_trained import LSTM_MODEL_PATH, LSTM_SCALER_PATH
+
+    app.fall_detector_mode_requested = str(
+        app.config.get("FALL_DETECTOR_MODE", "rules")
+    ).strip().lower()
+    app.fall_detector_mode = "rules"
+    app.fall_model_artifacts = {
+        "pose_model_exists": Path("models/pose_landmarker.task").exists(),
+        "lstm_model_exists": Path(LSTM_MODEL_PATH).exists(),
+        "lstm_scaler_exists": Path(LSTM_SCALER_PATH).exists(),
+    }
+    model_info_path = Path("models/model_info.json")
+    app.fall_model_info = {}
+    if model_info_path.exists():
+        try:
+            app.fall_model_info = json.loads(model_info_path.read_text())
+        except Exception as e:
+            logger.warning("Could not parse %s: %s", model_info_path, e)
+
+    threshold = app.config.get("FALL_CONFIDENCE_THRESHOLD", 0.55)
+    velocity_window = app.config.get("FALL_VELOCITY_WINDOW", 8)
+    cooldown_frames = app.config.get("FALL_COOLDOWN_FRAMES", 30)
+
     try:
-        app.fall_detector = FallDetector()
-        logger.info("FallDetector initialised (Phase 1 — rules-based)")
+        if app.fall_detector_mode_requested == "lstm":
+            from models.fall_detection_trained import LSTMFallDetector
+            app.fall_detector = LSTMFallDetector(
+                threshold=threshold,
+                cooldown_frames=cooldown_frames,
+            )
+            app.fall_detector_mode = "lstm"
+            logger.info("FallDetector initialised (Phase 2 — LSTM)")
+        else:
+            app.fall_detector = FallDetector(
+                fall_threshold=threshold,
+                velocity_window=velocity_window,
+            )
+            app.fall_detector_mode = "rules"
+            logger.info("FallDetector initialised (Phase 1 — rules-based)")
     except Exception as e:
-        app.fall_detector = None
-        logger.warning("FallDetector could not be initialised: %s", e)
+        if app.fall_detector_mode_requested == "lstm":
+            logger.warning("LSTM detector init failed, falling back to rules: %s", e)
+            try:
+                app.fall_detector = FallDetector(
+                    fall_threshold=threshold,
+                    velocity_window=velocity_window,
+                )
+                app.fall_detector_mode = "rules"
+                logger.info("FallDetector fallback initialised (Phase 1 — rules-based)")
+            except Exception as fallback_err:
+                app.fall_detector = None
+                app.fall_detector_mode = "unavailable"
+                logger.warning("FallDetector fallback failed: %s", fallback_err)
+        else:
+            app.fall_detector = None
+            app.fall_detector_mode = "unavailable"
+            logger.warning("FallDetector could not be initialised: %s", e)
 
     # Register blueprints
     from api.routes import api_bp

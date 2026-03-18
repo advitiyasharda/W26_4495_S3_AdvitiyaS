@@ -47,3 +47,13 @@ ENABLE_ACCESS_CONTROL = True
 # Hardware Configuration
 TARGET_DEVICE = 'raspberry_pi'  # 'raspberry_pi' or 'jetson_nano'
 ENABLE_GPU = False  # Set to True if using Jetson with GPU
+
+# Fall Detection Configuration
+# Mode options: "rules" (default) or "lstm"
+FALL_DETECTOR_MODE = os.environ.get("FALL_DETECTOR_MODE", "rules").strip().lower()
+# Shared confidence threshold used by both rules and LSTM implementations
+FALL_CONFIDENCE_THRESHOLD = float(os.environ.get("FALL_CONFIDENCE_THRESHOLD", "0.55"))
+# Rules-specific setting
+FALL_VELOCITY_WINDOW = int(os.environ.get("FALL_VELOCITY_WINDOW", "8"))
+# Cooldown used by LSTM detector (rules detector has built-in cooldown)
+FALL_COOLDOWN_FRAMES = int(os.environ.get("FALL_COOLDOWN_FRAMES", "30"))

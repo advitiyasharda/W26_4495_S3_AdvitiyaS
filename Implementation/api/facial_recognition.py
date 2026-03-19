@@ -256,6 +256,28 @@ class FacialRecognitionEngine:
             logger.error(f"Error extracting face features: {e}")
             return None
     
+    def recognize_all_faces(self, frame: np.ndarray) -> List[dict]:
+        """
+        Detect and recognize every face present in a single frame.
+
+        Returns a list of recognition result dicts (same shape as
+        recognize_face()) each extended with a 'face_location' key
+        containing [x, y, w, h].  Returns an empty list when no
+        faces are detected.
+        """
+        faces = self.detect_faces(frame)
+        if len(faces) == 0:
+            return []
+
+        results = []
+        for face_coords in faces:
+            x, y, w, h = (int(v) for v in face_coords)
+            result = self.recognize_face(frame, (x, y, w, h))
+            if result is not None:
+                result["face_location"] = [x, y, w, h]
+                results.append(result)
+        return results
+
     def get_recognition_stats(self) -> dict:
         """Get statistics about recognized faces"""
         return {

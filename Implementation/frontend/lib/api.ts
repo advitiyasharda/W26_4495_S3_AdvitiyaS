@@ -129,10 +129,19 @@ export interface FallEventsResponse {
 }
 export interface FallStatusResponse {
   detector_ready: boolean;
+  active_mode?: "rules" | "lstm" | "unavailable";
+  requested_mode?: "rules" | "lstm";
   fall_threshold: number;
   velocity_window: number;
+  sequence_length?: number;
   cooldown_frames: number;
   history_length: number;
+  artifacts?: {
+    pose_model_exists?: boolean;
+    lstm_model_exists?: boolean;
+    lstm_scaler_exists?: boolean;
+  };
+  model_info?: Record<string, unknown>;
 }
 export const getFallEvents = (limit = 20) =>
   fetchAPI<FallEventsResponse>(`/fall/events?limit=${limit}`);

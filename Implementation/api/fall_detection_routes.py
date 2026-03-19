@@ -15,7 +15,9 @@ its hip-velocity history across successive frames from a streaming client.
 
 import base64
 import logging
-from datetime import datetime
+import json
+from datetime import datetime, timedelta
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -44,18 +46,63 @@ def _get_db():
     return current_app.db
 
 
-def _log_fall_to_db(result) -> None:
+def _build_fall_description(reason: str, confidence: float, hip_height: float,
+                            torso_angle: float, hip_velocity: float,
+                            source: str) -> str:
+    return (
+        f"Fall detected: {reason} | "
+        f"source={source} "
+        f"confidence={confidence:.2f} "
+        f"hip_y={hip_height:.3f} "
+        f"angle={torso_angle:.1f}deg "
+        f"vel={hip_velocity:.4f}"
+    )
+
+
+def _log_repeated_falls_if_needed(db) -> None:
+    """Raise repeated-falls threat if threshold met, with basic dedupe window."""
+    try:
+        detector = current_app.threat_detector
+        alert = detector.check_repeated_falls(db)
+        if not alert:
+            return
+
+        existing = db.get_active_threats(severity=alert["severity"])
+        cutoff = datetime.utcnow() - timedelta(hours=1)
+        for row in existing or []:
+            if row.get("threat_type") != alert["threat_type"]:
+                continue
+            ts_raw = str(row.get("timestamp", ""))
+            try:
+                ts = datetime.fromisoformat(ts_raw.replace("Z", ""))
+            except Exception:
+                continue
+            if ts >= cutoff:
+                return
+
+        db.log_threat(
+            threat_type=alert["threat_type"],
+            severity=alert["severity"],
+            user_id=alert.get("person_id", "fall_detection"),
+            message=alert.get("message", "Repeated falls detected"),
+        )
+    except Exception as e:
+        logger.warning("Could not evaluate repeated-falls threat: %s", e)
+
+
+def _log_fall_to_db(result, source: str = "backend_rules") -> None:
     """
     Write a fall event to the anomalies table and escalate to the
     threats table as a CRITICAL security alert so it surfaces on the
     main alerts dashboard alongside other threat rules.
     """
-    description = (
-        f"Fall detected: {result.reason} | "
-        f"confidence={result.confidence:.2f} "
-        f"hip_y={result.hip_height:.3f} "
-        f"angle={result.torso_angle_deg:.1f}° "
-        f"vel={result.hip_velocity:.4f}"
+    description = _build_fall_description(
+        result.reason,
+        result.confidence,
+        result.hip_height,
+        result.torso_angle_deg,
+        result.hip_velocity,
+        source,
     )
     try:
         db = _get_db()
@@ -65,6 +112,7 @@ def _log_fall_to_db(result) -> None:
             anomaly_score=result.confidence,
             description=description,
         )
+        _log_repeated_falls_if_needed(db)
     except Exception as e:
         logger.warning("Could not log fall anomaly to DB: %s", e)
 
@@ -75,7 +123,7 @@ def _log_fall_to_db(result) -> None:
             severity="CRITICAL",
             user_id="fall_detection",
             message=(
-                f"Fall detected (confidence {result.confidence:.0%}): "
+                f"Fall detected via {source} (confidence {result.confidence:.0%}): "
                 f"{result.reason}"
             ),
         )
@@ -133,7 +181,7 @@ def detect_fall():
 
     # Persist fall events to the DB (async-safe, swallows errors internally)
     if result.is_fall:
-        _log_fall_to_db(result)
+        _log_fall_to_db(result, source=f"api_{getattr(current_app, 'fall_detector_mode', 'rules')}")
         logger.warning(
             "FALL via API  conf=%.2f  hip_y=%.2f  angle=%.0f°  | %s",
             result.confidence, result.hip_height,
@@ -167,15 +215,46 @@ def fall_detector_status():
         }
     """
     detector = current_app.fall_detector
+    artifacts = getattr(current_app, "fall_model_artifacts", {})
+    model_info = getattr(current_app, "fall_model_info", {})
+    model_info_path = Path("models/model_info.json")
+    if not model_info and model_info_path.exists():
+        try:
+            model_info = json.loads(model_info_path.read_text())
+        except Exception:
+            model_info = {}
+
     if detector is None:
-        return jsonify({"detector_ready": False}), 200
+        return jsonify({
+            "detector_ready": False,
+            "active_mode": getattr(current_app, "fall_detector_mode", "unavailable"),
+            "requested_mode": getattr(current_app, "fall_detector_mode_requested", "rules"),
+            "artifacts": artifacts,
+            "model_info": model_info,
+        }), 200
+
+    is_rules = hasattr(detector, "_hip_y_history")
+    cooldown_frames = (
+        detector._fall_cooldown_frames if hasattr(detector, "_fall_cooldown_frames")
+        else getattr(detector, "_cooldown", 0)
+    )
+    history_length = (
+        len(detector._hip_y_history) if hasattr(detector, "_hip_y_history")
+        else len(getattr(detector, "_buffer", []))
+    )
 
     return jsonify({
         "detector_ready":  True,
-        "fall_threshold":  detector.fall_threshold,
-        "velocity_window": detector.velocity_window,
-        "cooldown_frames": detector._fall_cooldown_frames,
-        "history_length":  len(detector._hip_y_history),
+        "active_mode": getattr(current_app, "fall_detector_mode", "rules"),
+        "requested_mode": getattr(current_app, "fall_detector_mode_requested", "rules"),
+        "fall_threshold": getattr(detector, "fall_threshold", getattr(detector, "threshold", 0.55)),
+        "velocity_window": getattr(detector, "velocity_window", 0),
+        "sequence_length": getattr(detector, "sequence_len", 0),
+        "cooldown_frames": cooldown_frames,
+        "history_length": history_length,
+        "artifacts": artifacts,
+        "model_info": model_info,
+        "implementation": "rules" if is_rules else "lstm",
     }), 200
 
 
@@ -197,6 +276,11 @@ def fall_events():
         rows = db.get_anomalies(limit=limit)
         # Filter to only fall_detected events
         falls = [r for r in rows if r.get("anomaly_type") == "fall_detected"]
+        # Normalize timestamps to UTC ISO with Z so frontend renders local time consistently
+        for item in falls:
+            ts = item.get("timestamp") or ""
+            if isinstance(ts, str) and "Z" not in ts and "+" not in ts:
+                item["timestamp"] = ts.replace(" ", "T", 1).strip() + "Z"
         return jsonify({"events": falls, "count": len(falls)}), 200
     except Exception as e:
         logger.exception("Error fetching fall events")
@@ -213,8 +297,14 @@ def reset_detector():
     if detector is None:
         return jsonify({"error": "FallDetector not initialised"}), 500
 
-    detector._hip_y_history.clear()
-    detector._fall_cooldown_frames = 0
+    if hasattr(detector, "_hip_y_history"):
+        detector._hip_y_history.clear()
+    if hasattr(detector, "_fall_cooldown_frames"):
+        detector._fall_cooldown_frames = 0
+    if hasattr(detector, "_buffer"):
+        detector._buffer.clear()
+    if hasattr(detector, "_cooldown"):
+        detector._cooldown = 0
     logger.info("FallDetector state reset via API")
     return jsonify({"status": "reset", "timestamp": datetime.now().isoformat()}), 200
 
@@ -234,11 +324,12 @@ def log_fall():
           "reason":          str,     // optional
           "hip_height":      float,   // optional
           "torso_angle_deg": float,   // optional
-          "hip_velocity":    float    // optional
+          "hip_velocity":    float,   // optional
+          "detector_source": "rules|lstm|external" // optional
         }
 
     Response JSON (200):
-        { "status": "logged", "timestamp": str }
+        { "status": "logged|logged_warning", "timestamp": str }
     """
     data = request.get_json(silent=True) or {}
 
@@ -255,27 +346,64 @@ def log_fall():
     hip_height    = data.get("hip_height", 0.0)
     torso_angle   = data.get("torso_angle_deg", 0.0)
     hip_velocity  = data.get("hip_velocity", 0.0)
+    detector_source = str(data.get("detector_source", "camera_external")).strip().lower()
 
-    description = (
-        f"Fall detected: {reason} | "
-        f"hip_y={hip_height:.3f} "
-        f"angle={torso_angle:.1f}° "
-        f"vel={hip_velocity:.4f}"
+    reason_lower = str(reason).lower()
+    is_visibility_warning = "body not fully visible" in reason_lower
+
+    description = _build_fall_description(
+        reason,
+        confidence,
+        float(hip_height),
+        float(torso_angle),
+        float(hip_velocity),
+        detector_source,
     )
 
     try:
         db = _get_db()
+        if is_visibility_warning:
+            db.log_threat(
+                threat_type="CAMERA_VISIBILITY_WARNING",
+                severity="LOW",
+                user_id="fall_detection",
+                message=(
+                    f"Camera visibility warning via {detector_source}: {reason}"
+                ),
+            )
+            logger.info(
+                "Visibility warning via /log  source=%s  | %s",
+                detector_source, reason
+            )
+            return jsonify({
+                "status": "logged_warning",
+                "detector_source": detector_source,
+                "timestamp": datetime.now().isoformat(timespec="seconds"),
+            }), 200
+
         db.log_anomaly(
             user_id="fall_detection",
             anomaly_type="fall_detected",
             anomaly_score=confidence,
             description=description,
         )
+        db.log_threat(
+            threat_type="FALL_DETECTED",
+            severity="CRITICAL",
+            user_id="fall_detection",
+            message=(
+                f"Fall detected via {detector_source} "
+                f"(confidence {confidence:.0%}): {reason}"
+            ),
+        )
+        _log_repeated_falls_if_needed(db)
         logger.warning(
-            "Fall logged via /log  conf=%.2f  | %s", confidence, reason
+            "Fall logged via /log  conf=%.2f  source=%s  | %s",
+            confidence, detector_source, reason
         )
         return jsonify({
             "status":    "logged",
+            "detector_source": detector_source,
             "timestamp": datetime.now().isoformat(timespec="seconds"),
         }), 200
     except Exception as e:

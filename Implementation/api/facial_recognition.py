@@ -5,6 +5,7 @@ Uses OpenCV for face detection and recognition
 import cv2
 import numpy as np
 import logging
+from collections import deque, Counter
 from datetime import datetime
 from typing import Tuple, List, Optional
 
@@ -22,6 +23,70 @@ try:
 except ImportError:
     fr_lib = None
     USE_FACE_RECOGNITION_LIB = False
+
+class RecognitionBuffer:
+    """
+    Smooths face recognition over a rolling window of recent frames.
+
+    On a door camera, a single bad frame (dark, partially occluded, motion
+    blur) can deny access to a registered resident.  This buffer keeps the
+    last N results and returns the majority-vote identity with averaged
+    confidence so one bad frame cannot flip the decision on its own.
+
+    Usage:
+        buf = RecognitionBuffer(maxlen=5, min_samples=3)
+        buf.update(person_id, confidence)
+        result = buf.get_smoothed()   # stable after min_samples frames
+    """
+
+    def __init__(self, maxlen: int = 5, min_samples: int = 3):
+        self.maxlen      = maxlen
+        self.min_samples = min_samples
+        self._history: deque = deque(maxlen=maxlen)  # (person_id | None, confidence)
+
+    def update(self, person_id: Optional[str], confidence: float) -> None:
+        """Add the latest raw recognition result to the rolling window."""
+        self._history.append((person_id, float(confidence)))
+
+    def get_smoothed(self) -> dict:
+        """
+        Return the smoothed result from recent history.
+
+        Returns:
+            {
+              "person_id":    str | None,  # majority-vote identity
+              "confidence":   float,       # mean confidence for that identity
+              "is_stable":    bool,        # True once min_samples frames seen
+              "sample_count": int
+            }
+        """
+        if not self._history:
+            return {"person_id": None, "confidence": 0.0,
+                    "is_stable": False, "sample_count": 0}
+
+        sample_count = len(self._history)
+        is_stable    = sample_count >= self.min_samples
+
+        ids         = [entry[0] for entry in self._history]
+        majority_id = Counter(ids).most_common(1)[0][0]
+
+        matching  = [conf for pid, conf in self._history if pid == majority_id]
+        avg_conf  = round(sum(matching) / len(matching), 4)
+
+        return {
+            "person_id":    majority_id,
+            "confidence":   avg_conf,
+            "is_stable":    is_stable,
+            "sample_count": sample_count,
+        }
+
+    def reset(self) -> None:
+        """Clear the buffer — call between sessions or on scene change."""
+        self._history.clear()
+
+    def __len__(self) -> int:
+        return len(self._history)
+
 
 class FacialRecognitionEngine:
     """
@@ -46,6 +111,10 @@ class FacialRecognitionEngine:
         self.known_faces = {}  # {person_id: [face_encodings]}
         self.person_names = {}  # {person_id: name}
         
+        # Per-engine smoothing buffer — keeps last 5 single-face results
+        # so one bad frame cannot deny access to a registered resident.
+        self.buffer = RecognitionBuffer(maxlen=5, min_samples=3)
+
         if USE_FACE_RECOGNITION_LIB:
             logger.info("Facial Recognition Engine initialized (using face_recognition/dlib for best accuracy)")
         else:
@@ -319,6 +388,37 @@ class FacialRecognitionEngine:
             logger.error(f"Error extracting face features: {e}")
             return None
     
+    def recognize_with_smoothing(self, frame: np.ndarray,
+                                 face_location: Tuple) -> Optional[dict]:
+        """
+        Recognize one face and apply RecognitionBuffer smoothing.
+
+        Calls recognize_face() for the current frame, feeds the raw result
+        into the internal buffer, then returns the majority-vote result
+        instead of the single-frame result.  Use this for live video streams
+        where one dark or blurry frame should not flip the access decision.
+
+        Returns the same dict shape as recognize_face(), with two extra fields:
+          "is_stable":    bool  — False until min_samples frames are buffered
+          "sample_count": int   — frames seen so far in the rolling window
+        """
+        raw = self.recognize_face(frame, face_location)
+        if raw is None:
+            return None
+
+        self.buffer.update(raw.get("person_id"), raw.get("confidence", 0.0))
+        smoothed = self.buffer.get_smoothed()
+
+        person_id = smoothed["person_id"]
+        return {
+            "person_id":    person_id,
+            "name":         self.person_names.get(person_id, "Unknown") if person_id else "Unknown",
+            "confidence":   smoothed["confidence"],
+            "timestamp":    raw.get("timestamp"),
+            "is_stable":    smoothed["is_stable"],
+            "sample_count": smoothed["sample_count"],
+        }
+
     def recognize_all_faces(self, frame: np.ndarray) -> List[dict]:
         """
         Detect and recognize every face present in a single frame.

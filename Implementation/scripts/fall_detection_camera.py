@@ -94,10 +94,14 @@ def parse_args():
         "--api-url", type=str, default="http://localhost:5001",
         help="Base URL of the Flask server (default: http://localhost:5001)"
     )
+    parser.add_argument(
+        "--skip", type=int, default=1,
+        help="Process every Nth frame (default: 1 = process all frames)"
+    )
     return parser.parse_args()
 
 
-def post_fall_to_api(result, api_url: str) -> None:
+def post_fall_to_api(result, api_url: str, detector_source: str = "camera_external") -> None:
     """Fire-and-forget: POST already-detected fall metadata to /api/fall/log.
 
     Uses /api/fall/log (not /api/fall/detect) so Flask logs the result
@@ -123,6 +127,7 @@ def post_fall_to_api(result, api_url: str) -> None:
                     "hip_height":      result.hip_height,
                     "torso_angle_deg": result.torso_angle_deg,
                     "hip_velocity":    result.hip_velocity,
+                    "detector_source": detector_source,
                 },
                 timeout=5,
             )
@@ -176,9 +181,15 @@ def run(args):
     if args.lstm:
         logger.info("Using Phase 2 LSTM fall detector")
         detector = LSTMFallDetector(threshold=args.threshold)
+        detector_source = "lstm"
     else:
         logger.info("Using Phase 1 rules-based fall detector")
         detector = FallDetector(fall_threshold=args.threshold)
+        detector_source = "rules"
+
+    if args.skip < 1:
+        logger.warning("--skip must be >= 1; defaulting to 1")
+        args.skip = 1
 
     cap = cv2.VideoCapture(args.camera)
     if not cap.isOpened():
@@ -229,7 +240,8 @@ def run(args):
                 continue
 
             frame_count += 1
-            result = detector.process_frame(frame)
+            should_process = (frame_count % args.skip == 0)
+            result = detector.process_frame(frame) if should_process else None
 
             # ── Handle fall event ──────────────────────────────────────────
             if result and result.is_fall:
@@ -244,7 +256,7 @@ def run(args):
                 # Post to Flask API → logged to DB → visible on dashboard
                 # Works for ANY person (unknown or registered) — pose-based only
                 if not args.no_api:
-                    post_fall_to_api(result, args.api_url)
+                    post_fall_to_api(result, args.api_url, detector_source=detector_source)
                 if csv_writer:
                     log_fall_event(csv_writer, result)
                     csv_file.flush()
@@ -256,7 +268,7 @@ def run(args):
                 and not args.no_api
                 and (time.time() - _last_visibility_warning_posted) > VISIBILITY_WARNING_THROTTLE_SEC
             ):
-                post_fall_to_api(result, args.api_url)
+                post_fall_to_api(result, args.api_url, detector_source=detector_source)
                 _last_visibility_warning_posted = time.time()
 
             # ── Draw overlay ───────────────────────────────────────────────

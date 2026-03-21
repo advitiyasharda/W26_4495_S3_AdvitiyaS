@@ -3,7 +3,7 @@ Flask API Routes for Door Face Panels Smart Security System
 """
 import base64
 import logging
-from datetime import datetime
+from datetime import datetime, timezone
 
 import cv2
 import numpy as np
@@ -408,10 +408,34 @@ def get_statistics():
 
         fall_count_today = 0
         try:
-            from datetime import date
             rows = db.get_anomalies(limit=200, anomaly_type="fall_detected")
-            today_str = date.today().isoformat()
-            fall_count_today = sum(1 for r in rows if str(r.get("timestamp", "")).startswith(today_str))
+            local_tz = datetime.now().astimezone().tzinfo
+            today_local = datetime.now(local_tz).date()
+
+            def _parse_to_local_date(ts_raw):
+                ts = str(ts_raw or "").strip()
+                if not ts:
+                    return None
+
+                # Handle common stored forms:
+                # - "YYYY-MM-DD HH:MM:SS" (SQLite CURRENT_TIMESTAMP, UTC)
+                # - ISO strings with/without timezone suffix
+                try:
+                    if "T" not in ts and " " in ts:
+                        dt = datetime.strptime(ts[:19], "%Y-%m-%d %H:%M:%S")
+                        dt = dt.replace(tzinfo=timezone.utc)
+                    else:
+                        dt = datetime.fromisoformat(ts.replace("Z", "+00:00"))
+                        if dt.tzinfo is None:
+                            dt = dt.replace(tzinfo=timezone.utc)
+                    return dt.astimezone(local_tz).date()
+                except Exception:
+                    return None
+
+            fall_count_today = sum(
+                1 for r in rows
+                if _parse_to_local_date(r.get("timestamp")) == today_local
+            )
         except Exception:
             pass
 

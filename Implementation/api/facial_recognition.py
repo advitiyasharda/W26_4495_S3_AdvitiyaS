@@ -188,6 +188,69 @@ class FacialRecognitionEngine:
             logger.error(f"Error removing face: {e}")
             return False
 
+    def _score_face_quality(self, face_roi: np.ndarray) -> dict:
+        """
+        Score a face ROI on three quality dimensions before registration.
+
+        Checks:
+          size       — ROI must be at least 60×60 px (smaller = unreliable features)
+          blur       — Laplacian variance must be ≥ 40 (low = blurry / out of focus)
+          brightness — mean pixel value must be 30–220 (avoid pitch-black or washed-out)
+
+        Returns a dict:
+          {
+            "passed":       bool,
+            "score":        float,   # 0.0 – 1.0 composite
+            "size_ok":      bool,
+            "blur_ok":      bool,
+            "brightness_ok": bool,
+            "reason":       str      # human-readable summary
+          }
+        """
+        if face_roi is None or face_roi.size == 0:
+            return {"passed": False, "score": 0.0, "size_ok": False,
+                    "blur_ok": False, "brightness_ok": False,
+                    "reason": "Empty or missing face ROI"}
+
+        h, w = face_roi.shape[:2]
+        gray = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
+
+        # ── Size ────────────────────────────────────────────────────────────
+        MIN_DIM = 60
+        size_ok = (h >= MIN_DIM and w >= MIN_DIM)
+
+        # ── Blur (Laplacian variance) ────────────────────────────────────────
+        BLUR_THRESHOLD = 40.0
+        lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        blur_ok = lap_var >= BLUR_THRESHOLD
+
+        # ── Brightness (mean pixel value) ────────────────────────────────────
+        BRIGHT_MIN, BRIGHT_MAX = 30.0, 220.0
+        mean_brightness = float(gray.mean())
+        brightness_ok = BRIGHT_MIN <= mean_brightness <= BRIGHT_MAX
+
+        # ── Composite score (equal weight) ───────────────────────────────────
+        score = round(sum([size_ok, blur_ok, brightness_ok]) / 3.0, 3)
+        passed = size_ok and blur_ok and brightness_ok
+
+        reasons = []
+        if not size_ok:
+            reasons.append(f"too small ({w}×{h}px, need {MIN_DIM}×{MIN_DIM})")
+        if not blur_ok:
+            reasons.append(f"blurry (variance={lap_var:.1f}, need ≥{BLUR_THRESHOLD})")
+        if not brightness_ok:
+            reasons.append(f"bad lighting (mean={mean_brightness:.0f}, need {BRIGHT_MIN}–{BRIGHT_MAX})")
+        reason = "; ".join(reasons) if reasons else "OK"
+
+        return {
+            "passed":        passed,
+            "score":         score,
+            "size_ok":       size_ok,
+            "blur_ok":       blur_ok,
+            "brightness_ok": brightness_ok,
+            "reason":        reason,
+        }
+
     def _extract_face_features(self, face_roi: np.ndarray) -> Optional[np.ndarray]:
         """
         Extract feature vector from face image.

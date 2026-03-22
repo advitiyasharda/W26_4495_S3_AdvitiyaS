@@ -122,7 +122,24 @@ def recognize_face():
             return jsonify({"error": "Could not decode image"}), 400
 
         engine = current_app.face_engine
-        all_recs = engine.recognize_all_faces(frame)
+
+        # For a single face use the smoothing buffer (majority vote over last
+        # 5 frames) so one bad frame cannot deny access to a known resident.
+        # For multiple faces fall back to raw per-face results — smoothing a
+        # crowd is unreliable without face-tracking across frames.
+        raw_faces = engine.recognize_all_faces(frame)
+
+        if len(raw_faces) == 1:
+            x, y, w, h = raw_faces[0].get("face_location", [0, 0, 0, 0])
+            smoothed = engine.recognize_with_smoothing(frame, (x, y, w, h))
+            if smoothed:
+                smoothed["face_location"] = [x, y, w, h]
+                all_recs = [smoothed]
+            else:
+                all_recs = raw_faces
+        else:
+            engine.buffer.reset()   # multi-face scene — clear single-face history
+            all_recs = raw_faces
 
         if not all_recs:
             return jsonify({

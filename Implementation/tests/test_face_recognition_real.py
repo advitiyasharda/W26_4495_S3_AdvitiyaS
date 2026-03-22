@@ -1,251 +1,313 @@
 """
-Test Face Recognition with Real Detection and Matching
+Face Recognition — Real Detection and Matching Tests
 
-Run from project root: python tests/test_face_recognition_real.py
+Loads registered faces from data/samples/, resolves each folder to its
+real person_id from the database (so results align with the live system),
+and runs either a live webcam test or a photo accuracy test.
+
+Run from project root:
+    python tests/test_face_recognition_real.py            # live webcam
+    python tests/test_face_recognition_real.py --photos   # photo accuracy
+    python tests/test_face_recognition_real.py --both     # both
 """
 import sys
+import argparse
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cv2
-from pathlib import Path
 from api.facial_recognition import FacialRecognitionEngine
 from data.database import Database
 
+SAMPLE_DIR = Path(__file__).resolve().parent.parent / "data" / "samples"
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+def _folder_to_display_name(folder_name: str) -> str:
+    """Convert a folder name like 'john_doe' → 'John Doe' for DB lookup."""
+    return folder_name.replace("_", " ").title()
+
+
+def _resolve_person_id(db: Database, folder_name: str) -> tuple:
+    """
+    Find the DB person_id and display name for a samples folder.
+
+    Tries three strategies in order:
+      1. Exact folder name match against DB user_id
+      2. Folder name → 'Title Case' match against DB name field
+      3. Case-insensitive partial match against DB name field
+
+    Returns (person_id, display_name).  If no DB record is found,
+    falls back to (folder_name, folder_name) with a warning so the
+    test still runs but results won't align with the live API.
+    """
+    try:
+        all_users = db.get_users() or []
+    except Exception:
+        all_users = []
+
+    # Strategy 1: folder name == user_id exactly
+    for u in all_users:
+        if u.get("user_id") == folder_name:
+            return u["user_id"], u.get("name", folder_name)
+
+    # Strategy 2: title-cased folder name matches DB name
+    display = _folder_to_display_name(folder_name)
+    for u in all_users:
+        if u.get("name", "").strip().lower() == display.lower():
+            return u["user_id"], u.get("name", display)
+
+    # Strategy 3: folder name is a substring of the DB name (or vice versa)
+    for u in all_users:
+        db_name = u.get("name", "").lower()
+        if folder_name.lower() in db_name or db_name in folder_name.lower():
+            return u["user_id"], u.get("name", folder_name)
+
+    print(f"  [WARN] No DB record found for folder '{folder_name}'. "
+          f"Using folder name as ID — results won't match the live API.")
+    return folder_name, display
+
+
+def _load_encodings(engine: FacialRecognitionEngine, db: Database) -> dict:
+    """
+    Load face encodings from data/samples/ into the engine.
+
+    Each folder is resolved to its real DB person_id so recognition
+    results use the same IDs as the live /api/recognize endpoint.
+    Photos that fail quality scoring are skipped with a warning.
+
+    Returns a mapping of {person_id: display_name} for summary display.
+    """
+    if not SAMPLE_DIR.exists():
+        print(f"  [WARN] Samples directory not found: {SAMPLE_DIR}")
+        print("         Register faces first: python scripts/capture_faces.py")
+        return {}
+
+    loaded = {}
+
+    for person_dir in sorted(SAMPLE_DIR.iterdir()):
+        if not person_dir.is_dir():
+            continue
+
+        folder_name = person_dir.name
+        person_id, display_name = _resolve_person_id(db, folder_name)
+
+        photos = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
+        if not photos:
+            continue
+
+        print(f"\n  Loading '{display_name}'  (id={person_id}, {len(photos)} photos)")
+
+        encodings_ok = 0
+        quality_skipped = 0
+
+        for photo_path in sorted(photos):
+            frame = cv2.imread(str(photo_path))
+            if frame is None:
+                print(f"    [SKIP] {photo_path.name} — could not read file")
+                continue
+
+            faces = engine.detect_faces(frame)
+            if not faces:
+                print(f"    [SKIP] {photo_path.name} — no face detected")
+                continue
+
+            x, y, w, h = (int(v) for v in faces[0])
+            face_roi = frame[y:y+h, x:x+w]
+
+            quality = engine._score_face_quality(face_roi)
+            if not quality["passed"]:
+                print(f"    [SKIP] {photo_path.name} — {quality['reason']}")
+                quality_skipped += 1
+                continue
+
+            encoding = engine._extract_face_features(face_roi)
+            if encoding is not None:
+                engine.register_face(person_id, display_name, encoding)
+                encodings_ok += 1
+
+        status = f"{encodings_ok} loaded"
+        if quality_skipped:
+            status += f", {quality_skipped} skipped (quality)"
+        print(f"    → {status}")
+
+        if encodings_ok > 0:
+            loaded[person_id] = display_name
+
+    return loaded
+
+
+# ── Tests ─────────────────────────────────────────────────────────────────────
+
 def test_recognition_with_webcam():
-    """Test face recognition in real-time with webcam"""
+    """Live webcam test — draws recognition result on each frame."""
     print("\n" + "=" * 70)
-    print("FACE RECOGNITION TEST - LIVE WEBCAM")
+    print("FACE RECOGNITION TEST — LIVE WEBCAM")
     print("=" * 70)
-    
+
     engine = FacialRecognitionEngine()
-    db = Database()
-    
-    # Load registered faces from database
-    print("\nLoading registered people...")
-    users = db.get_database_stats()
-    print(f"  Users in database: {users.get('total_users', 0)}")
-    
-    # Load face encodings from registered people
-    # In a real system, we'd query the database
-    sample_dir = Path('data/samples')
-    registered_people = []
-    
-    if sample_dir.exists():
-        for person_dir in sample_dir.iterdir():
-            if person_dir.is_dir():
-                person_name = person_dir.name
-                photos = list(person_dir.glob('*.jpg')) + list(person_dir.glob('*.png'))
-                
-                if photos:
-                    print(f"\n  Loading {person_name} ({len(photos)} photos)...")
-                    
-                    for photo_path in photos:
-                        try:
-                            frame = cv2.imread(str(photo_path))
-                            if frame is None:
-                                continue
-                            
-                            faces = engine.detect_faces(frame)
-                            if len(faces) > 0:
-                                (x, y, w, h) = faces[0]
-                                face_roi = frame[y:y+h, x:x+w]
-                                encoding = engine._extract_face_features(face_roi)
-                                
-                                if encoding is not None:
-                                    engine.register_face(person_name, person_name, encoding)
-                                    registered_people.append(person_name)
-                                    print(f"    [OK] Loaded {photo_path.name}")
-                        except Exception as e:
-                            print(f"    [FAIL] Error: {e}")
-    
-    print(f"\n[OK] Loaded {len(engine.known_faces)} registered people")
-    
-    # Test with webcam
-    print("\n" + "=" * 70)
-    print("Opening webcam for recognition test...")
-    print("Press Q or ESC to exit (click the video window first if key doesn't work)")
-    print("=" * 70 + "\n")
-    
+    db     = Database()
+
+    print("\nLoading registered people from data/samples/...")
+    loaded = _load_encodings(engine, db)
+
+    if not loaded:
+        print("\n[ERROR] No faces loaded. Cannot run webcam test.")
+        return
+
+    print(f"\n[OK] {len(loaded)} person(s) loaded: {', '.join(loaded.values())}")
+
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
-        print("ERROR: Webcam not found!")
+        print("\n[ERROR] Webcam not found.")
         return
-    
-    frame_count = 0
-    recognized_count = 0
-    
+
+    print("\nWebcam open. Press Q or ESC to quit (click the window first).\n")
+
+    frame_count  = 0
+    granted_count = 0
+
     while True:
         ret, frame = cap.read()
         if not ret:
             break
-        
+
         frame_count += 1
-        
-        # Detect faces
         faces = engine.detect_faces(frame)
-        
-        # Process each detected face
-        for (x, y, w, h) in faces:
-            # Recognize face
+
+        for face_coords in faces:
+            x, y, w, h = (int(v) for v in face_coords)
             result = engine.recognize_face(frame, (x, y, w, h))
-            
-            # Draw rectangle
-            if result['person_id']:
-                # Known person
-                color = (0, 255, 0)  # Green
-                recognized_count += 1
+
+            if result and result.get("person_id"):
+                color = (0, 255, 0)
                 label = f"{result['name']} ({result['confidence']:.2f})"
+                granted_count += 1
             else:
-                # Unknown person
-                color = (0, 0, 255)  # Red
-                label = f"Unknown ({result['confidence']:.2f})"
-            
+                color = (0, 0, 255)
+                conf  = result.get("confidence", 0.0) if result else 0.0
+                label = f"Unknown ({conf:.2f})"
+
             cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
-            cv2.putText(frame, label, (x, y-10), 
-                       cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
-        
-        # Show statistics
-        cv2.putText(frame, f'Frames: {frame_count} | Recognized: {recognized_count}',
-                   (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (255, 255, 255), 2)
-        
-        # Show registered people
-        cv2.putText(frame, f'Registered: {len(engine.known_faces)}',
-                   (10, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
-        # Quit hint (click window first so key is detected)
-        h, w = frame.shape[:2]
-        cv2.putText(frame, 'Q or ESC to quit (click window first)', (10, h - 15),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (200, 200, 200), 1)
-        
-        cv2.imshow('Face Recognition Test', frame)
-        
-        # Q or q or ESC to quit (window must be focused for key press to register)
+            cv2.putText(frame, label, (x, y - 10),
+                        cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
+
+        fh, fw = frame.shape[:2]
+        cv2.putText(frame, f"Frames: {frame_count}  Granted: {granted_count}",
+                    (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
+        cv2.putText(frame, f"Registered: {len(loaded)}  |  Q / ESC to quit",
+                    (10, fh - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 180), 1)
+
+        cv2.imshow("Face Recognition — Webcam Test", frame)
+
         key = cv2.waitKey(1) & 0xFF
-        if key in (ord('q'), ord('Q'), 27):  # 27 = ESC
+        if key in (ord("q"), ord("Q"), 27):
             break
-    
+
     cap.release()
     cv2.destroyAllWindows()
-    
-    # Summary
+
     print("\n" + "=" * 70)
-    print("RECOGNITION TEST SUMMARY")
+    print("WEBCAM TEST SUMMARY")
     print("=" * 70)
-    print(f"Total frames processed: {frame_count}")
-    print(f"Faces recognized: {recognized_count}")
-    if frame_count > 0:
-        print(f"Recognition rate: {100*recognized_count/frame_count:.1f}%")
-    print(f"Registered people: {len(engine.known_faces)}")
+    print(f"  Frames processed : {frame_count}")
+    print(f"  Faces granted    : {granted_count}")
+    if frame_count:
+        print(f"  Grant rate       : {100 * granted_count / frame_count:.1f}%")
+    print(f"  Registered people: {len(loaded)}")
+
 
 def test_recognition_with_photos():
-    """Test recognition on stored sample photos"""
+    """
+    Photo accuracy test — registers all sample photos then tests each
+    photo against the loaded encodings and reports per-person accuracy.
+    """
     print("\n" + "=" * 70)
-    print("FACE RECOGNITION TEST - STORED PHOTOS")
+    print("FACE RECOGNITION TEST — PHOTO ACCURACY")
     print("=" * 70)
-    
+
     engine = FacialRecognitionEngine()
-    sample_dir = Path('data/samples')
-    
-    if not sample_dir.exists():
-        print("No sample photos found")
-        print("Run: python scripts/capture_faces.py")
+    db     = Database()
+
+    print("\nLoading registered people from data/samples/...")
+    loaded = _load_encodings(engine, db)
+
+    if not loaded:
+        print("\n[ERROR] No faces loaded. Cannot run photo test.")
         return
-    
-    # Load registered people
-    print("\nLoading registered people...")
-    all_encodings = {}
-    
-    for person_dir in sample_dir.iterdir():
-        if person_dir.is_dir():
-            person_name = person_dir.name
-            photos = list(person_dir.glob('*.jpg')) + list(person_dir.glob('*.png'))
-            
-            if photos:
-                all_encodings[person_name] = []
-                
-                for photo_path in photos:
-                    try:
-                        frame = cv2.imread(str(photo_path))
-                        if frame is None:
-                            continue
-                        
-                        faces = engine.detect_faces(frame)
-                        if len(faces) > 0:
-                            (x, y, w, h) = faces[0]
-                            face_roi = frame[y:y+h, x:x+w]
-                            encoding = engine._extract_face_features(face_roi)
-                            
-                            if encoding is not None:
-                                all_encodings[person_name].append(encoding)
-                                engine.register_face(person_name, person_name, encoding)
-                    except Exception as e:
-                        print(f"Error: {e}")
-    
-    print(f"[OK] Loaded {len(engine.known_faces)} registered people\n")
-    
-    # Test recognition on photos
-    print("Testing recognition on sample photos...\n")
-    
-    total_tests = 0
+
+    print(f"\n[OK] {len(loaded)} person(s) loaded. Testing accuracy...\n")
+
+    total  = 0
     correct = 0
-    
-    for person_dir in sample_dir.iterdir():
+
+    for person_dir in sorted(SAMPLE_DIR.iterdir()):
         if not person_dir.is_dir():
             continue
-        
-        person_name = person_dir.name
-        photos = list(person_dir.glob('*.jpg')) + list(person_dir.glob('*.png'))
-        
+
+        folder_name = person_dir.name
+        person_id, display_name = _resolve_person_id(db, folder_name)
+
+        photos = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
         if not photos:
             continue
-        
-        print(f"{person_name}:")
-        
-        for photo_path in photos:
-            try:
-                frame = cv2.imread(str(photo_path))
-                if frame is None:
-                    continue
-                
-                faces = engine.detect_faces(frame)
-                if len(faces) > 0:
-                    (x, y, w, h) = faces[0]
-                    result = engine.recognize_face(frame, (x, y, w, h))
-                    
-                    total_tests += 1
-                    is_correct = result['person_id'] == person_name
-                    
-                    if is_correct:
-                        correct += 1
-                        status = "[OK]"
-                    else:
-                        status = "[FAIL]"
-                    
-                    print(f"  {status} {photo_path.name}: {result['name']} ({result['confidence']:.2f})")
-            except Exception as e:
-                print(f"  Error: {e}")
-    
-    # Summary
-    print("\n" + "=" * 70)
-    print("RECOGNITION RESULTS")
-    print("=" * 70)
-    print(f"Total tests: {total_tests}")
-    print(f"Correct: {correct}")
-    if total_tests > 0:
-        accuracy = 100 * correct / total_tests
-        print(f"Accuracy: {accuracy:.1f}%")
 
-if __name__ == '__main__':
-    print("\nFace Recognition Testing Options:")
-    print("1. Test with live webcam")
-    print("2. Test with stored sample photos")
-    
-    choice = input("\nSelect option (1-2): ").strip()
-    
-    if choice == '1':
-        test_recognition_with_webcam()
-    elif choice == '2':
+        print(f"{display_name}  (id={person_id})")
+
+        for photo_path in sorted(photos):
+            frame = cv2.imread(str(photo_path))
+            if frame is None:
+                continue
+
+            faces = engine.detect_faces(frame)
+            if not faces:
+                print(f"  [SKIP] {photo_path.name} — no face detected")
+                continue
+
+            x, y, w, h = (int(v) for v in faces[0])
+            result = engine.recognize_face(frame, (x, y, w, h))
+
+            total += 1
+            predicted_id = result.get("person_id") if result else None
+            is_correct   = predicted_id == person_id
+            if is_correct:
+                correct += 1
+
+            status = "[OK]  " if is_correct else "[FAIL]"
+            name   = result.get("name", "Unknown") if result else "Unknown"
+            conf   = result.get("confidence", 0.0) if result else 0.0
+            print(f"  {status} {photo_path.name}: predicted='{name}'  conf={conf:.2f}")
+
+        print()
+
+    print("=" * 70)
+    print("PHOTO ACCURACY SUMMARY")
+    print("=" * 70)
+    print(f"  Total tests : {total}")
+    print(f"  Correct     : {correct}")
+    if total:
+        print(f"  Accuracy    : {100 * correct / total:.1f}%")
+
+
+# ── Entry point ───────────────────────────────────────────────────────────────
+
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(
+        description="Test facial recognition with real webcam or sample photos"
+    )
+    parser.add_argument("--photos",     action="store_true",
+                        help="Run photo accuracy test only")
+    parser.add_argument("--both",       action="store_true",
+                        help="Run photo accuracy test then webcam test")
+    args = parser.parse_args()
+
+    if args.photos:
         test_recognition_with_photos()
+    elif args.both:
+        test_recognition_with_photos()
+        test_recognition_with_webcam()
     else:
-        print("Invalid option")
+        # Default: live webcam
+        test_recognition_with_webcam()

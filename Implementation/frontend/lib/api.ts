@@ -149,3 +149,50 @@ export const getFallStatus = () =>
   fetchAPI<FallStatusResponse>("/fall/status");
 export const resetFallDetector = () =>
   fetchAPI<{ status: string }>("/fall/reset", { method: "POST" });
+
+// ─── Object Detection ─────────────────────────────────────────────────────────
+
+export type ObjectCategory =
+  | "WEAPON"
+  | "SECURITY_THREAT"
+  | "PARCEL"
+  | "MOBILITY_AID"
+  | "OPERATIONAL";
+
+export type ObjectSeverity = "CRITICAL" | "HIGH" | "MEDIUM" | "INFO" | "LOW";
+
+export interface ObjectDetectionEvent {
+  object_class: string;
+  category: ObjectCategory;
+  severity: ObjectSeverity;
+  confidence: number;
+  unattended_seconds: number;
+  frame_count: number;
+  timestamp: string;
+}
+
+export interface ObjectEventsResponse {
+  events: ObjectDetectionEvent[];
+  count: number;
+}
+
+export interface ObjectStatusResponse {
+  detector_ready: boolean;
+  weapon_model_ready: boolean;
+  confidence: number;
+  frame_threshold: number;
+  unattended_minutes: number;
+  events_logged: number;
+  category_counts: Partial<Record<ObjectCategory, number>>;
+  message?: string;
+}
+
+export const getObjectEvents = (limit = 50, category?: string, severity?: string) => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (category) params.set("category", category);
+  if (severity) params.set("severity", severity);
+  return fetchAPI<ObjectEventsResponse>(`/objects/events?${params.toString()}`);
+};
+
+export const getObjectStatus = () =>
+  fetchAPI<ObjectStatusResponse>("/objects/status");

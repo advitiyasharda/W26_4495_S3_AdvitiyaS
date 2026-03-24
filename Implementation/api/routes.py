@@ -79,21 +79,29 @@ def recognition_status():
 @api_bp.route("/recognize", methods=["POST"])
 def recognize_face():
     """
-    Recognize a face from camera frame.
+    Recognize ALL faces present in a single camera frame.
 
     Expected JSON:
-    {
-        "frame": "base64_encoded_image"  (optional: "data:image/jpeg;base64,...")
-    }
+        { "frame": "<base64-encoded JPEG/PNG>" }
 
-    Returns:
-    {
-        "person_id": "string" | null,
-        "name": "string",
-        "confidence": 0.0-1.0,
-        "access_granted": bool,
-        "timestamp": "ISO format"
-    }
+    Response JSON (200):
+        {
+          "person_id":     str | null,   // primary result (first granted, or first face)
+          "name":          str,
+          "confidence":    float,
+          "access_granted": bool,
+          "timestamp":     str,
+          "face_count":    int,          // total faces detected
+          "faces": [                     // one entry per detected face
+            {
+              "person_id":     str | null,
+              "name":          str,
+              "confidence":    float,
+              "access_granted": bool,
+              "face_location": [x, y, w, h]
+            }, ...
+          ]
+        }
     """
     try:
         data = request.get_json()
@@ -114,156 +122,133 @@ def recognize_face():
             return jsonify({"error": "Could not decode image"}), 400
 
         engine = current_app.face_engine
-        faces = engine.detect_faces(frame)
-        if len(faces) == 0:
+
+        # For a single face use the smoothing buffer (majority vote over last
+        # 5 frames) so one bad frame cannot deny access to a known resident.
+        # For multiple faces fall back to raw per-face results — smoothing a
+        # crowd is unreliable without face-tracking across frames.
+        raw_faces = engine.recognize_all_faces(frame)
+
+        if len(raw_faces) == 1:
+            x, y, w, h = raw_faces[0].get("face_location", [0, 0, 0, 0])
+            smoothed = engine.recognize_with_smoothing(frame, (x, y, w, h))
+            if smoothed:
+                smoothed["face_location"] = [x, y, w, h]
+                all_recs = [smoothed]
+            else:
+                all_recs = raw_faces
+        else:
+            engine.buffer.reset()   # multi-face scene — clear single-face history
+            all_recs = raw_faces
+
+        if not all_recs:
             return jsonify({
                 "person_id": None,
                 "name": "Unknown",
                 "confidence": 0.0,
                 "access_granted": False,
-                "timestamp": str(datetime.now().isoformat()),
+                "face_count": 0,
+                "faces": [],
+                "timestamp": datetime.now().isoformat(),
             }), 200
 
-        x, y, w, h = (int(v) for v in faces[0])
-        rec = engine.recognize_face(frame, (x, y, w, h))
-        conf = rec.get("confidence", 0.0)
-        access_granted = (
-            rec.get("person_id") is not None
-            and float(conf) >= engine.confidence_threshold
-        )
-        # Coerce to native Python types for JSON (avoid numpy float/int)
-        result = {
-            "person_id": rec.get("person_id"),
-            "name": str(rec.get("name", "Unknown")),
-            "confidence": float(conf),
-            "access_granted": bool(access_granted),
-            "timestamp": str(rec.get("timestamp", datetime.now().isoformat())),
-        }
-        logger.info("Face recognized: %s (confidence: %.2f)", result["name"], result["confidence"])
         db = get_db()
-        if access_granted and result["person_id"]:
-            # Map recognition result to an existing user if possible to avoid duplicates.
-            # Prefer an existing DB user with the same name; otherwise, create a new user
-            # with the engine's person_id as the primary key.
-            db_user_id = result["person_id"]
-            existing = db.get_user_by_name(result["name"])
-            if existing:
-                db_user_id = existing.get("user_id", db_user_id)
+        timestamp = datetime.now().isoformat()
+        processed_faces = []
+
+        for rec in all_recs:
+            conf = rec.get("confidence", 0.0)
+            access_granted = (
+                rec.get("person_id") is not None
+                and float(conf) >= engine.confidence_threshold
+            )
+            face_result = {
+                "person_id":      rec.get("person_id"),
+                "name":           str(rec.get("name", "Unknown")),
+                "confidence":     float(conf),
+                "access_granted": bool(access_granted),
+                "face_location":  rec.get("face_location", []),
+                "timestamp":      timestamp,
+            }
+
+            if access_granted and face_result["person_id"]:
+                db_user_id = face_result["person_id"]
+                existing = db.get_user_by_name(face_result["name"])
+                if existing:
+                    db_user_id = existing.get("user_id", db_user_id)
+                else:
+                    db.add_user(db_user_id, face_result["name"], "resident")
+
+                db.log_access(db_user_id, "entry", confidence=float(conf), status="success")
+
+                try:
+                    threat_detector = current_app.threat_detector
+                    threat_detector.log_access_attempt(db_user_id, success=True)
+                    tailgating = threat_detector.check_tailgating(db_user_id, db)
+                    if tailgating:
+                        db.log_threat(tailgating["threat_type"], tailgating["severity"],
+                                      user_id=db_user_id, message=tailgating["message"])
+                    unusual = threat_detector.check_unusual_access_time(db_user_id)
+                    if unusual:
+                        db.log_threat(unusual["threat_type"], unusual["severity"],
+                                      user_id=db_user_id, message=unusual["message"])
+                except Exception as e:
+                    logger.warning("Threat detection skipped: %s", e)
+
+                db.log_audit("ACCESS_GRANTED", user_id=db_user_id,
+                             resource="door/main-entrance", result="success",
+                             details=f"confidence={conf:.2f}")
+
+                try:
+                    anomaly_event = {"timestamp": timestamp, "person_id": db_user_id,
+                                     "access_type": "entry", "confidence": float(conf)}
+                    anomaly_result = current_app.anomaly_detector.predict_anomaly(anomaly_event)
+                    face_result["anomaly_score"] = anomaly_result.get("anomaly_score", 0.0)
+                    face_result["is_anomaly"]    = anomaly_result.get("is_anomaly", False)
+                    if anomaly_result.get("is_anomaly"):
+                        score = anomaly_result.get("anomaly_score", 0.0)
+                        db.log_anomaly(db_user_id, "BEHAVIOURAL_ANOMALY", score,
+                                       f"Unusual access pattern (score={score:.3f})")
+                        db.log_threat(threat_type="Behavioural Anomaly Detected",
+                                      severity="MEDIUM", user_id=db_user_id,
+                                      message=(f"Unusual access pattern for {face_result['name']}. "
+                                               f"Score: {score:.3f}."))
+                except Exception as e:
+                    logger.warning("Anomaly detection skipped: %s", e)
+
+                logger.info("Access granted: %s (conf=%.2f)", face_result["name"], conf)
+
             else:
-                db.add_user(db_user_id, result["name"], "resident")
+                unknown_id = "Unknown"
+                db.add_user("Unknown", "Unknown", "resident")
+                db.log_access("Unknown", "entry", confidence=float(conf), status="failed")
+                db.log_audit("ACCESS_DENIED", user_id=unknown_id,
+                             resource="door/main-entrance", result="failed",
+                             details=f"confidence={conf:.2f}")
+                db.log_threat(threat_type="Unrecognised Face Detected", severity="HIGH",
+                              user_id=unknown_id,
+                              message=(f"Face at main entrance, no match. "
+                                       f"Confidence: {float(conf):.2f}."))
+                try:
+                    threat_detector = current_app.threat_detector
+                    threat_detector.log_access_attempt(unknown_id, success=False)
+                    repeated = threat_detector.check_failed_access_attempts(unknown_id)
+                    if repeated:
+                        db.log_threat(repeated["threat_type"], repeated["severity"],
+                                      user_id=unknown_id, message=repeated["message"])
+                except Exception as e:
+                    logger.warning("Failed-attempt check skipped: %s", e)
 
-            db.log_access(
-                db_user_id,
-                "entry",
-                confidence=float(conf),
-                status="success",
-            )
+                logger.info("Access denied: unknown face (conf=%.2f)", conf)
 
-            # --- Threat Detection ---
-            try:
-                threat_detector = current_app.threat_detector
-                access_type_val = "entry"  # all /recognize calls are entries
-                # Wandering check (only meaningful for exits — kept here for future exit endpoint)
-                wandering = threat_detector.check_wandering(db_user_id, access_type_val)
-                if wandering:
-                    db.log_threat(
-                        wandering["threat_type"],
-                        wandering["severity"],
-                        user_id=db_user_id,
-                        message=wandering["message"],
-                    )
-                # Tailgating check
-                tailgating = threat_detector.check_tailgating(db_user_id, db)
-                if tailgating:
-                    db.log_threat(
-                        tailgating["threat_type"],
-                        tailgating["severity"],
-                        user_id=db_user_id,
-                        message=tailgating["message"],
-                    )
-                # Unusual time check (already exists, just needs calling)
-                unusual = threat_detector.check_unusual_access_time(db_user_id)
-                if unusual:
-                    db.log_threat(
-                        unusual["threat_type"],
-                        unusual["severity"],
-                        user_id=db_user_id,
-                        message=unusual["message"],
-                    )
-            except Exception as e:
-                logger.warning("Threat detection skipped: %s", e)
-            # --- End Threat Detection ---
+            processed_faces.append(face_result)
 
-            db.log_audit(
-                "ACCESS_GRANTED",
-                user_id=db_user_id,
-                resource="door/main-entrance",
-                result="success",
-                details=f"confidence={conf:.2f}",
-            )
-
-            # --- Anomaly Detection ---
-            # Score this access event through the Isolation Forest model.
-            # If flagged as anomalous, log it to the anomalies table and
-            # raise a threat alert so caregivers are notified on the dashboard.
-            try:
-                anomaly_event = {
-                    "timestamp": result["timestamp"],
-                    "person_id": db_user_id,
-                    "access_type": "entry",
-                    "confidence": float(conf),
-                }
-                anomaly_detector = current_app.anomaly_detector
-                anomaly_result = anomaly_detector.predict_anomaly(anomaly_event)
-                result["anomaly_score"] = anomaly_result.get("anomaly_score", 0.0)
-                result["is_anomaly"] = anomaly_result.get("is_anomaly", False)
-
-                if anomaly_result.get("is_anomaly"):
-                    score = anomaly_result.get("anomaly_score", 0.0)
-                    db.log_anomaly(
-                        db_user_id,
-                        "BEHAVIOURAL_ANOMALY",
-                        score,
-                        f"Isolation Forest flagged unusual access pattern (score={score:.3f})",
-                    )
-                    db.log_threat(
-                        threat_type="Behavioural Anomaly Detected",
-                        severity="MEDIUM",
-                        user_id=db_user_id,
-                        message=(
-                            f"Unusual access pattern detected for {result['name']}. "
-                            f"Anomaly score: {score:.3f}."
-                        ),
-                    )
-                    logger.warning(
-                        "Anomaly flagged for %s — score=%.3f", result["name"], score
-                    )
-            except Exception as e:
-                logger.warning("Anomaly detection skipped: %s", e)
-            # --- End Anomaly Detection ---
-
-        else:
-            # Face detected but not recognized or below threshold
-            unknown_id = result["name"] or "Unknown"
-            db.add_user("Unknown", "Unknown", "resident")  # ensure FK exists
-            db.log_access("Unknown", "entry", confidence=float(conf), status="failed")
-            db.log_audit(
-                "ACCESS_DENIED",
-                user_id=unknown_id,
-                resource="door/main-entrance",
-                result="failed",
-                details=f"confidence={conf:.2f}",
-            )
-            db.log_threat(
-                threat_type="Unrecognised Face Detected",
-                severity="HIGH",
-                user_id=unknown_id,
-                message=(
-                    f"Face detected at main entrance but no match in database. "
-                    f"Confidence: {float(conf):.2f}."
-                ),
-            )
-        return jsonify(result), 200
+        # Primary result = first person granted access, else first face detected
+        granted = [f for f in processed_faces if f.get("access_granted")]
+        primary = (granted[0] if granted else processed_faces[0]).copy()
+        primary["face_count"] = len(processed_faces)
+        primary["faces"]      = processed_faces
+        return jsonify(primary), 200
 
     except Exception as e:
         logger.exception("Error in face recognition")

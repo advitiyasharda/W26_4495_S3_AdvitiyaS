@@ -5,6 +5,7 @@ Uses OpenCV for face detection and recognition
 import cv2
 import numpy as np
 import logging
+from collections import deque, Counter
 from datetime import datetime
 from typing import Tuple, List, Optional
 
@@ -22,6 +23,70 @@ try:
 except ImportError:
     fr_lib = None
     USE_FACE_RECOGNITION_LIB = False
+
+class RecognitionBuffer:
+    """
+    Smooths face recognition over a rolling window of recent frames.
+
+    On a door camera, a single bad frame (dark, partially occluded, motion
+    blur) can deny access to a registered resident.  This buffer keeps the
+    last N results and returns the majority-vote identity with averaged
+    confidence so one bad frame cannot flip the decision on its own.
+
+    Usage:
+        buf = RecognitionBuffer(maxlen=5, min_samples=3)
+        buf.update(person_id, confidence)
+        result = buf.get_smoothed()   # stable after min_samples frames
+    """
+
+    def __init__(self, maxlen: int = 5, min_samples: int = 3):
+        self.maxlen      = maxlen
+        self.min_samples = min_samples
+        self._history: deque = deque(maxlen=maxlen)  # (person_id | None, confidence)
+
+    def update(self, person_id: Optional[str], confidence: float) -> None:
+        """Add the latest raw recognition result to the rolling window."""
+        self._history.append((person_id, float(confidence)))
+
+    def get_smoothed(self) -> dict:
+        """
+        Return the smoothed result from recent history.
+
+        Returns:
+            {
+              "person_id":    str | None,  # majority-vote identity
+              "confidence":   float,       # mean confidence for that identity
+              "is_stable":    bool,        # True once min_samples frames seen
+              "sample_count": int
+            }
+        """
+        if not self._history:
+            return {"person_id": None, "confidence": 0.0,
+                    "is_stable": False, "sample_count": 0}
+
+        sample_count = len(self._history)
+        is_stable    = sample_count >= self.min_samples
+
+        ids         = [entry[0] for entry in self._history]
+        majority_id = Counter(ids).most_common(1)[0][0]
+
+        matching  = [conf for pid, conf in self._history if pid == majority_id]
+        avg_conf  = round(sum(matching) / len(matching), 4)
+
+        return {
+            "person_id":    majority_id,
+            "confidence":   avg_conf,
+            "is_stable":    is_stable,
+            "sample_count": sample_count,
+        }
+
+    def reset(self) -> None:
+        """Clear the buffer — call between sessions or on scene change."""
+        self._history.clear()
+
+    def __len__(self) -> int:
+        return len(self._history)
+
 
 class FacialRecognitionEngine:
     """
@@ -46,6 +111,10 @@ class FacialRecognitionEngine:
         self.known_faces = {}  # {person_id: [face_encodings]}
         self.person_names = {}  # {person_id: name}
         
+        # Per-engine smoothing buffer — keeps last 5 single-face results
+        # so one bad frame cannot deny access to a registered resident.
+        self.buffer = RecognitionBuffer(maxlen=5, min_samples=3)
+
         if USE_FACE_RECOGNITION_LIB:
             logger.info("Facial Recognition Engine initialized (using face_recognition/dlib for best accuracy)")
         else:
@@ -188,6 +257,69 @@ class FacialRecognitionEngine:
             logger.error(f"Error removing face: {e}")
             return False
 
+    def _score_face_quality(self, face_roi: np.ndarray) -> dict:
+        """
+        Score a face ROI on three quality dimensions before registration.
+
+        Checks:
+          size       — ROI must be at least 60×60 px (smaller = unreliable features)
+          blur       — Laplacian variance must be ≥ 40 (low = blurry / out of focus)
+          brightness — mean pixel value must be 30–220 (avoid pitch-black or washed-out)
+
+        Returns a dict:
+          {
+            "passed":       bool,
+            "score":        float,   # 0.0 – 1.0 composite
+            "size_ok":      bool,
+            "blur_ok":      bool,
+            "brightness_ok": bool,
+            "reason":       str      # human-readable summary
+          }
+        """
+        if face_roi is None or face_roi.size == 0:
+            return {"passed": False, "score": 0.0, "size_ok": False,
+                    "blur_ok": False, "brightness_ok": False,
+                    "reason": "Empty or missing face ROI"}
+
+        h, w = face_roi.shape[:2]
+        gray = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
+
+        # ── Size ────────────────────────────────────────────────────────────
+        MIN_DIM = 60
+        size_ok = (h >= MIN_DIM and w >= MIN_DIM)
+
+        # ── Blur (Laplacian variance) ────────────────────────────────────────
+        BLUR_THRESHOLD = 40.0
+        lap_var = float(cv2.Laplacian(gray, cv2.CV_64F).var())
+        blur_ok = lap_var >= BLUR_THRESHOLD
+
+        # ── Brightness (mean pixel value) ────────────────────────────────────
+        BRIGHT_MIN, BRIGHT_MAX = 30.0, 220.0
+        mean_brightness = float(gray.mean())
+        brightness_ok = BRIGHT_MIN <= mean_brightness <= BRIGHT_MAX
+
+        # ── Composite score (equal weight) ───────────────────────────────────
+        score = round(sum([size_ok, blur_ok, brightness_ok]) / 3.0, 3)
+        passed = size_ok and blur_ok and brightness_ok
+
+        reasons = []
+        if not size_ok:
+            reasons.append(f"too small ({w}×{h}px, need {MIN_DIM}×{MIN_DIM})")
+        if not blur_ok:
+            reasons.append(f"blurry (variance={lap_var:.1f}, need ≥{BLUR_THRESHOLD})")
+        if not brightness_ok:
+            reasons.append(f"bad lighting (mean={mean_brightness:.0f}, need {BRIGHT_MIN}–{BRIGHT_MAX})")
+        reason = "; ".join(reasons) if reasons else "OK"
+
+        return {
+            "passed":        passed,
+            "score":         score,
+            "size_ok":       size_ok,
+            "blur_ok":       blur_ok,
+            "brightness_ok": brightness_ok,
+            "reason":        reason,
+        }
+
     def _extract_face_features(self, face_roi: np.ndarray) -> Optional[np.ndarray]:
         """
         Extract feature vector from face image.
@@ -256,6 +388,59 @@ class FacialRecognitionEngine:
             logger.error(f"Error extracting face features: {e}")
             return None
     
+    def recognize_with_smoothing(self, frame: np.ndarray,
+                                 face_location: Tuple) -> Optional[dict]:
+        """
+        Recognize one face and apply RecognitionBuffer smoothing.
+
+        Calls recognize_face() for the current frame, feeds the raw result
+        into the internal buffer, then returns the majority-vote result
+        instead of the single-frame result.  Use this for live video streams
+        where one dark or blurry frame should not flip the access decision.
+
+        Returns the same dict shape as recognize_face(), with two extra fields:
+          "is_stable":    bool  — False until min_samples frames are buffered
+          "sample_count": int   — frames seen so far in the rolling window
+        """
+        raw = self.recognize_face(frame, face_location)
+        if raw is None:
+            return None
+
+        self.buffer.update(raw.get("person_id"), raw.get("confidence", 0.0))
+        smoothed = self.buffer.get_smoothed()
+
+        person_id = smoothed["person_id"]
+        return {
+            "person_id":    person_id,
+            "name":         self.person_names.get(person_id, "Unknown") if person_id else "Unknown",
+            "confidence":   smoothed["confidence"],
+            "timestamp":    raw.get("timestamp"),
+            "is_stable":    smoothed["is_stable"],
+            "sample_count": smoothed["sample_count"],
+        }
+
+    def recognize_all_faces(self, frame: np.ndarray) -> List[dict]:
+        """
+        Detect and recognize every face present in a single frame.
+
+        Returns a list of recognition result dicts (same shape as
+        recognize_face()) each extended with a 'face_location' key
+        containing [x, y, w, h].  Returns an empty list when no
+        faces are detected.
+        """
+        faces = self.detect_faces(frame)
+        if len(faces) == 0:
+            return []
+
+        results = []
+        for face_coords in faces:
+            x, y, w, h = (int(v) for v in face_coords)
+            result = self.recognize_face(frame, (x, y, w, h))
+            if result is not None:
+                result["face_location"] = [x, y, w, h]
+                results.append(result)
+        return results
+
     def get_recognition_stats(self) -> dict:
         """Get statistics about recognized faces"""
         return {

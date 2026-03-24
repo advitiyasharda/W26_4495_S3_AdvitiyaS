@@ -58,7 +58,8 @@ class FaceRegistration:
             if photo_dir.exists():
                 photos = list(photo_dir.glob('*.jpg')) + list(photo_dir.glob('*.png'))
                 encodings_registered = 0
-                
+                quality_skipped = 0
+
                 for photo_path in photos:
                     frame = cv2.imread(str(photo_path))
                     if frame is None:
@@ -68,11 +69,20 @@ class FaceRegistration:
                         continue
                     x, y, w, h = faces[0]
                     face_roi = frame[y:y+h, x:x+w]
+
+                    quality = self.engine._score_face_quality(face_roi)
+                    if not quality["passed"]:
+                        print(f"  [SKIP] {photo_path.name} — {quality['reason']}")
+                        quality_skipped += 1
+                        continue
+
                     encoding = self.engine._extract_face_features(face_roi)
                     if encoding is not None:
                         self.engine.register_face(person_id, name, encoding)
                         encodings_registered += 1
-                
+
+                if quality_skipped:
+                    print(f"  [!] {quality_skipped} photo(s) skipped (poor quality)")
                 if encodings_registered > 0:
                     print(f"  [OK] Registered {encodings_registered} face encoding(s) from {photo_dir}/")
                 else:
@@ -114,32 +124,42 @@ class FaceRegistration:
         print(f"\nFound {len(photos)} photos for {person_name}")
         print(f"Extracting face encodings from photos...")
         
-        # Extract face encodings from all photos
+        # Extract face encodings from all photos (quality-checked)
         encodings = []
+        quality_skipped = 0
         for i, photo_path in enumerate(photos, 1):
             try:
                 frame = cv2.imread(str(photo_path))
                 if frame is None:
                     print(f"  [FAIL] Could not read {photo_path.name}")
                     continue
-                
-                # Detect faces in photo
+
                 faces = self.engine.detect_faces(frame)
-                if len(faces) > 0:
-                    # Extract encoding from detected face
-                    (x, y, w, h) = faces[0]
-                    face_roi = frame[y:y+h, x:x+w]
-                    encoding = self.engine._extract_face_features(face_roi)
-                    
-                    if encoding is not None:
-                        encodings.append(encoding)
-                        print(f"  [OK] Extracted encoding from {photo_path.name}")
-                    else:
-                        print(f"  [FAIL] Failed to extract encoding from {photo_path.name}")
-                else:
+                if len(faces) == 0:
                     print(f"  [FAIL] No face detected in {photo_path.name}")
+                    continue
+
+                (x, y, w, h) = faces[0]
+                face_roi = frame[y:y+h, x:x+w]
+
+                quality = self.engine._score_face_quality(face_roi)
+                if not quality["passed"]:
+                    print(f"  [SKIP] {photo_path.name} — {quality['reason']}")
+                    quality_skipped += 1
+                    continue
+
+                encoding = self.engine._extract_face_features(face_roi)
+                if encoding is not None:
+                    encodings.append(encoding)
+                    print(f"  [OK]   {photo_path.name} (quality score {quality['score']:.2f})")
+                else:
+                    print(f"  [FAIL] Failed to extract encoding from {photo_path.name}")
             except Exception as e:
                 print(f"  [FAIL] Error processing {photo_path.name}: {e}")
+
+        if quality_skipped:
+            print(f"\n  [!] {quality_skipped}/{len(photos)} photos skipped — poor quality"
+                  f" (blurry, too small, or bad lighting). Recapture for better accuracy.")
         
         if not encodings:
             print(f"\n[FAIL] Could not extract face encodings from any photos")

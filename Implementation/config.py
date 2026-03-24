@@ -62,7 +62,7 @@ FALL_COOLDOWN_FRAMES = int(os.environ.get("FALL_COOLDOWN_FRAMES", "30"))
 # Minimum YOLO confidence to surface a detection
 OBJECT_DETECTION_CONFIDENCE = float(os.environ.get("OBJECT_DETECTION_CONFIDENCE", "0.45"))
 # How many consecutive frames an object must appear before triggering an alert (reduces false positives)
-OBJECT_DETECTION_FRAME_THRESHOLD = int(os.environ.get("OBJECT_DETECTION_FRAME_THRESHOLD", "3"))
+OBJECT_DETECTION_FRAME_THRESHOLD = int(os.environ.get("OBJECT_DETECTION_FRAME_THRESHOLD", "2"))
 # Minutes an item must remain unattended before raising a MEDIUM threat
 OBJECT_UNATTENDED_MINUTES = float(os.environ.get("OBJECT_UNATTENDED_MINUTES", "2.0"))
 # Path to a custom fine-tuned weapon model; falls back to YOLOv8n if missing

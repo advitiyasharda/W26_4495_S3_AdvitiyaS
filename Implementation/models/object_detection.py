@@ -2,23 +2,28 @@
 Object Detection Module — Phase 3 (YOLOv8)
 
 Detects security-relevant objects at the door and classifies them into
-five categories with associated threat levels:
+four categories with associated threat levels:
 
-  Category          Threat level   Examples
+  Category          Base level  Unattended (>2 min)   Examples
   ─────────────────────────────────────────────────────────────────────
-  WEAPON            CRITICAL       knife, scissors (COCO); gun (custom)
-  SECURITY_THREAT   HIGH/MEDIUM    backpack (odd-hour), sports equipment
-  PARCEL            INFO           handbag, suitcase, backpack (daytime)
-  MOBILITY_AID      INFO           wheelchair proxy objects
-  OPERATIONAL       LOW            bottle, cup, chair near entrance
+  WEAPON            CRITICAL    CRITICAL              knife, scissors, gun
+  SECURITY_THREAT   HIGH        CRITICAL              suitcase, baseball bat
+  PARCEL            INFO        MEDIUM                backpack, handbag left at door
+  MOBILITY_AID      INFO        INFO                  wheelchair (chair proxy)
+
+Design decisions
+─────────────────
+- Person is intentionally NOT classified — face recognition handles persons.
+- Only objects realistic at a door entry are included; household items
+  (TV, fridge, couch, sports ball, clock…) are ignored to avoid noise.
+- Parcel starts as INFO: a delivery for the resident is not a threat.
+  After UNATTENDED_MINUTES it escalates to MEDIUM (still waiting).
+- Suitcase starts as HIGH: unattended luggage is inherently suspicious.
+  After UNATTENDED_MINUTES it escalates to CRITICAL.
 
 Frame-filtering:
-  An object must be detected in FRAME_THRESHOLD consecutive frames before
-  an alert fires — this prevents one-frame false positives.
-
-Unattended-item timer:
-  If a PARCEL or SECURITY_THREAT object remains in frame for longer than
-  UNATTENDED_MINUTES the severity is escalated to MEDIUM.
+  An object must appear in FRAME_THRESHOLD consecutive frames before an
+  alert fires — prevents single-frame false positives.
 """
 
 from __future__ import annotations
@@ -34,65 +39,46 @@ import numpy as np
 
 logger = logging.getLogger(__name__)
 
-# ── COCO class → category / severity mapping ─────────────────────────────────
-# Numbers are COCO class IDs used by YOLOv8n.
+# ── COCO class → category mapping ────────────────────────────────────────────
+# Only objects that are realistic at a door entry point are listed.
+# Person (class 0) is intentionally excluded — face recognition handles persons.
 
-# Classes that are always weapons regardless of context
+# WEAPON (CRITICAL): actual weapons visible at a door
 _WEAPON_CLASSES: Dict[int, str] = {
-    43: "knife",       # COCO 43 — knife
-    76: "scissors",    # COCO 76 — scissors (can be used as weapon)
+    43: "knife",        # COCO 43
+    76: "scissors",     # COCO 76 — usable as weapon
+    34: "baseball_bat", # COCO 34 — blunt weapon
 }
 
-# Classes that are potential security threats (context-dependent)
+# SECURITY_THREAT (HIGH → CRITICAL when unattended):
+# Luggage/large bags are suspicious at a care facility entrance.
+# An unattended suitcase is a serious concern.
 _SECURITY_THREAT_CLASSES: Dict[int, str] = {
-    24: "backpack",    # COCO 24 — suspicious if at odd hours
-    26: "handbag",     # COCO 26 — left unattended
-    28: "suitcase",    # COCO 28 — unauthorized moving attempt
-    33: "sports_ball", # COCO 33 — proxy for thrown object
-    34: "baseball_bat",# COCO 34 — blunt weapon
-    35: "baseball_glove",
-    36: "skateboard",
-    38: "tennis_racket",
-    74: "clock",       # standalone — unusual
+    28: "suitcase",     # COCO 28 — unattended luggage
 }
 
-# Classes that indicate a delivery / parcel
+# PARCEL (INFO → MEDIUM when unattended):
+# A package or bag left at the door for the resident is a delivery, not a threat.
+# Severity only escalates if it sits there unattended for too long.
 _PARCEL_CLASSES: Dict[int, str] = {
-    26: "handbag",     # also parcel if left at door
-    28: "suitcase",    # luggage / overnight visitor
-    24: "backpack",    # delivery pack
+    24: "backpack",     # COCO 24 — delivery pack / courier bag
+    26: "handbag",      # COCO 26 — bag left at door
 }
 
-# Classes that indicate mobility / medical aid
+# MOBILITY_AID (INFO): accessibility objects near the entrance
 _MOBILITY_AID_CLASSES: Dict[int, str] = {
-    56: "chair",       # proxy for wheelchair
-    57: "couch",       # gurney-like
-    62: "tv",          # medical monitor (loose proxy)
-    72: "refrigerator",# O2 / medical equipment (loose)
+    56: "chair",        # COCO 56 — wheelchair proxy
 }
 
-# Operational / facility-management hazards
-_OPERATIONAL_CLASSES: Dict[int, str] = {
-    39: "bottle",      # spilled liquid / slip hazard
-    41: "cup",
-    42: "fork",
-    44: "spoon",
-    45: "bowl",
-    17: "cat",         # escaped pet
-    16: "dog",
-    0:  "person",      # fallen person near door (complement to fall detection)
-}
-
-# Custom class names added by the fine-tuned weapon model
+# Custom class names output by the fine-tuned weapon model
 _CUSTOM_WEAPON_NAMES = {"gun", "pistol", "rifle", "handgun", "firearm", "weapon"}
 
-# Severity for each category
+# Base severity for each category
 _CATEGORY_SEVERITY = {
     "WEAPON":          "CRITICAL",
     "SECURITY_THREAT": "HIGH",
     "PARCEL":          "INFO",
     "MOBILITY_AID":    "INFO",
-    "OPERATIONAL":     "LOW",
 }
 
 
@@ -184,6 +170,32 @@ class ObjectDetector:
 
     # ── Frame processing ──────────────────────────────────────────────────────
 
+    def detect_all(self, frame: np.ndarray) -> List[dict]:
+        """
+        Return every YOLO detection on this frame (no category filter, no frame-
+        threshold filter).  Used by the camera debug view so the operator can see
+        what the model is seeing even for objects not in our tracked set.
+        """
+        if not self._model_ready:
+            return []
+        results = []
+        try:
+            for r in self._model(frame, conf=self.confidence, verbose=False):
+                for box in r.boxes:
+                    cls_id  = int(box.cls[0])
+                    cls_name = self._model.names.get(cls_id, str(cls_id))
+                    cat, sev = self._classify(cls_name, cls_id)
+                    results.append({
+                        "object_class": cls_name,
+                        "confidence":   float(box.conf[0]),
+                        "bbox":         tuple(float(v) for v in box.xyxyn[0]),
+                        "category":     cat,   # None if not in our tracked set
+                        "severity":     sev,
+                    })
+        except Exception as e:
+            logger.warning("detect_all error: %s", e)
+        return results
+
     def process_frame(self, frame: np.ndarray) -> List[DetectionEvent]:
         """
         Run detection on one BGR frame.
@@ -244,10 +256,14 @@ class ObjectDetector:
 
             unattended_sec = time.time() - self._first_seen[cls_name]
 
-            # Escalate unattended parcel/threat after timer
+            # Unattended escalation rules:
+            #   PARCEL   INFO  → MEDIUM  after timer (delivery still sitting there)
+            #   SECURITY HIGH  → CRITICAL after timer (unattended suitcase = serious)
             if unattended_sec >= self.unattended_seconds:
-                if category in ("PARCEL", "OPERATIONAL") and severity in ("INFO", "LOW"):
+                if category == "PARCEL" and severity == "INFO":
                     severity = "MEDIUM"
+                elif category == "SECURITY_THREAT" and severity == "HIGH":
+                    severity = "CRITICAL"
 
             # Only fire once the object has been seen for enough consecutive frames
             if self._frame_counts[cls_name] >= self.frame_threshold:
@@ -279,33 +295,37 @@ class ObjectDetector:
     def _classify(
         self, cls_name: str, cls_id: int
     ) -> Tuple[Optional[str], Optional[str]]:
-        """Return (category, severity) or (None, None) if not security-relevant."""
+        """
+        Return (category, severity) or (None, None) if not security-relevant.
+
+        Lookup order matters — weapons are checked first so a baseball bat
+        is always WEAPON rather than falling through to another category.
+        Parcels are checked after security threats so suitcase (SECURITY_THREAT)
+        is never accidentally downgraded to PARCEL (INFO).
+        """
         name_lower = cls_name.lower()
 
-        # Custom weapon model outputs
+        # 1. Custom fine-tuned weapon model outputs (e.g. gun, pistol)
         if name_lower in _CUSTOM_WEAPON_NAMES:
             return "WEAPON", "CRITICAL"
 
-        # COCO weapons
+        # 2. COCO weapon classes (knife, scissors, baseball bat)
         if cls_id in _WEAPON_CLASSES:
             return "WEAPON", "CRITICAL"
 
-        # Security threats (backpack / bat / etc.)
+        # 3. Security threats — suspicious unattended items (suitcase)
         if cls_id in _SECURITY_THREAT_CLASSES:
             return "SECURITY_THREAT", _CATEGORY_SEVERITY["SECURITY_THREAT"]
 
-        # Parcels / deliveries — subset of security-threat classes
+        # 4. Parcels — deliveries for the resident, NOT a threat by default
         if cls_id in _PARCEL_CLASSES:
             return "PARCEL", _CATEGORY_SEVERITY["PARCEL"]
 
-        # Mobility aids
+        # 5. Mobility aids near the entrance
         if cls_id in _MOBILITY_AID_CLASSES:
             return "MOBILITY_AID", _CATEGORY_SEVERITY["MOBILITY_AID"]
 
-        # Operational hazards
-        if cls_id in _OPERATIONAL_CLASSES:
-            return "OPERATIONAL", _CATEGORY_SEVERITY["OPERATIONAL"]
-
+        # Everything else (person, bottle, cup, TV, etc.) is ignored
         return None, None
 
     # ── Event log helpers ─────────────────────────────────────────────────────

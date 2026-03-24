@@ -57,3 +57,18 @@ FALL_CONFIDENCE_THRESHOLD = float(os.environ.get("FALL_CONFIDENCE_THRESHOLD", "0
 FALL_VELOCITY_WINDOW = int(os.environ.get("FALL_VELOCITY_WINDOW", "8"))
 # Cooldown used by LSTM detector (rules detector has built-in cooldown)
 FALL_COOLDOWN_FRAMES = int(os.environ.get("FALL_COOLDOWN_FRAMES", "30"))
+
+# Object Detection Configuration (Phase 3 — YOLOv8)
+# Minimum YOLO confidence to surface a detection
+OBJECT_DETECTION_CONFIDENCE = float(os.environ.get("OBJECT_DETECTION_CONFIDENCE", "0.45"))
+# How many consecutive frames an object must appear before triggering an alert (reduces false positives)
+OBJECT_DETECTION_FRAME_THRESHOLD = int(os.environ.get("OBJECT_DETECTION_FRAME_THRESHOLD", "3"))
+# Minutes an item must remain unattended before raising a MEDIUM threat
+OBJECT_UNATTENDED_MINUTES = float(os.environ.get("OBJECT_UNATTENDED_MINUTES", "2.0"))
+# Path to a custom fine-tuned weapon model; falls back to YOLOv8n if missing
+OBJECT_WEAPON_MODEL_PATH = os.environ.get(
+    "OBJECT_WEAPON_MODEL_PATH",
+    os.path.join(os.path.dirname(__file__), "models", "weapon_detector.pt"),
+)
+# Base YOLOv8 model used when the custom weapon model is absent
+OBJECT_BASE_MODEL = os.environ.get("OBJECT_BASE_MODEL", "yolov8n.pt")

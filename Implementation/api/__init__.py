@@ -135,11 +135,41 @@ def create_app(config_name="config"):
             app.fall_detector_mode = "unavailable"
             logger.warning("FallDetector could not be initialised: %s", e)
 
+    # Initialise object detector (Phase 3 — YOLOv8)
+    try:
+        from models.object_detection import ObjectDetector
+        weapon_model_path = app.config.get(
+            "OBJECT_WEAPON_MODEL_PATH", "models/weapon_detector.pt"
+        )
+        base_model = app.config.get("OBJECT_BASE_MODEL", "yolov8n.pt")
+        obj_confidence = app.config.get("OBJECT_DETECTION_CONFIDENCE", 0.45)
+        obj_frame_threshold = app.config.get("OBJECT_DETECTION_FRAME_THRESHOLD", 3)
+        obj_unattended_minutes = app.config.get("OBJECT_UNATTENDED_MINUTES", 2.0)
+
+        app.object_detector = ObjectDetector(
+            weapon_model_path=weapon_model_path,
+            base_model=base_model,
+            confidence=obj_confidence,
+            frame_threshold=obj_frame_threshold,
+            unattended_minutes=obj_unattended_minutes,
+        )
+        logger.info(
+            "ObjectDetector initialised (ready=%s, weapon_model=%s)",
+            app.object_detector.is_ready,
+            app.object_detector.weapon_model_ready,
+        )
+    except Exception as e:
+        app.object_detector = None
+        logger.warning("ObjectDetector could not be initialised: %s", e)
+
     # Register blueprints
     from api.routes import api_bp
     app.register_blueprint(api_bp, url_prefix="/api")
 
     from api.fall_detection_routes import fall_bp
     app.register_blueprint(fall_bp, url_prefix="/api/fall")
+
+    from api.object_detection_routes import objects_bp
+    app.register_blueprint(objects_bp, url_prefix="/api/objects")
 
     return app

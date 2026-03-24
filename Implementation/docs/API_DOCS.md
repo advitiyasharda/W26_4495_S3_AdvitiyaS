@@ -2,7 +2,7 @@
 
 ## Door Face Panels Smart Security System API
 
-Base URL: `http://localhost:5000/api`
+Base URL: `http://localhost:5001/api`
 
 ## Health Check
 
@@ -50,6 +50,19 @@ Recognize a face from camera frame and determine access permission.
 - `400`: Invalid/missing frame data
 - `500`: Processing error
 
+### GET /recognition/status
+
+Return face engine health/details used by the dashboard system status widget.
+
+**Response**:
+```json
+{
+  "engine_ready": true,
+  "mode": "opencv|face_recognition",
+  "loaded_faces": 3
+}
+```
+
 ---
 
 ## Access Logging
@@ -75,6 +88,31 @@ Log a door access event (entry/exit).
     "timestamp": "2026-01-30T10:00:00"
 }
 ```
+
+---
+
+## Fall Detection
+
+### POST /fall/detect
+
+Analyze one base64 frame directly on the backend detector.
+
+### POST /fall/log
+
+Log an externally detected fall (used by `scripts/fall_detection_camera.py`).
+This endpoint writes to anomalies and escalates CRITICAL fall threats.
+
+### GET /fall/events
+
+Return recent logged fall anomalies.
+
+### GET /fall/status
+
+Return detector mode, readiness, cooldown, artifact availability and model metadata.
+
+### POST /fall/reset
+
+Reset detector runtime state (history/cooldown).
 
 ---
 
@@ -265,12 +303,12 @@ Authorization: Bearer <jwt_token>
 
 ```bash
 # 1. Capture frame from camera and recognize face
-curl -X POST http://localhost:5000/api/recognize \
+curl -X POST http://localhost:5001/api/recognize \
   -H "Content-Type: application/json" \
   -d '{"frame": "BASE64_IMAGE_DATA"}'
 
 # 2. Log the access
-curl -X POST http://localhost:5000/api/log-access \
+curl -X POST http://localhost:5001/api/log-access \
   -H "Content-Type: application/json" \
   -d '{
     "person_id": "resident_001",
@@ -279,20 +317,20 @@ curl -X POST http://localhost:5000/api/log-access \
   }'
 
 # 3. Check for active threats
-curl http://localhost:5000/api/threats
+curl http://localhost:5001/api/threats
 ```
 
 ### Example 2: Monitoring Dashboard
 
 ```bash
 # Get all system statistics
-curl http://localhost:5000/api/stats
+curl http://localhost:5001/api/stats
 
 # Get today's access logs
-curl http://localhost:5000/api/logs?limit=50
+curl http://localhost:5001/api/logs?limit=50
 
 # Get high-severity alerts
-curl http://localhost:5000/api/threats?severity=HIGH
+curl http://localhost:5001/api/threats?severity=HIGH
 ```
 
 ---

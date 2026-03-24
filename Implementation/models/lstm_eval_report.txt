@@ -1,0 +1,12 @@
+LSTM Fall Detection Evaluation
+========================================
+Status: Pending evaluation
+
+Run the evaluator after training artifacts are present:
+  python scripts/evaluate_lstm.py
+
+Expected outputs in this report:
+- Sample count
+- Accuracy
+- Confusion matrix
+- Classification report

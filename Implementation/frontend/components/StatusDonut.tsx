@@ -50,7 +50,10 @@ export default function StatusDonut({ logs }: Props) {
               ))}
             </Pie>
             <Tooltip
-              formatter={(v: number) => [`${v} (${((v / total) * 100).toFixed(0)}%)`, ""]}
+              formatter={(v) => {
+                const n = typeof v === "number" ? v : 0;
+                return [`${n} (${total ? ((n / total) * 100).toFixed(0) : 0}%)`, ""];
+              }}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
             />
           </PieChart>

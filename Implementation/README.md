@@ -107,7 +107,8 @@ Implementation/
 ├── models/                          # ML models
 │   ├── anomaly_detection.py         # Isolation Forest anomaly detector
 │   ├── isolation_forest.pkl         # Trained Isolation Forest model artifact
-│   ├── fall_detection.py            # FallDetector (Phase 1 rules) + LSTMFallDetector (Phase 2)
+│   ├── fall_detection.py            # FallDetector (Phase 1 rules-based)
+│   ├── fall_detection_trained.py    # LSTMFallDetector (Phase 2 trained model)
 │   ├── pose_landmarker.task         # MediaPipe pre-trained pose skeleton model (download separately)
 │   ├── fall_lstm.keras              # Trained LSTM fall detection model (93% accuracy)
 │   └── fall_lstm_scaler.pkl         # Feature scaler for LSTM model
@@ -456,6 +457,9 @@ All system settings live in `config.py`:
 | `ANOMALY_SCORE_THRESHOLD`     | `0.7`              | Isolation Forest score cutoff                 |
 | `DATABASE_PATH`               | `data/doorface.db` | SQLite file location                          |
 | `TARGET_DEVICE`               | `raspberry_pi`     | Hardware target for optimisation              |
+| `FALL_DETECTOR_MODE`          | `rules`            | Fall runtime mode (`rules` or `lstm`)         |
+| `FALL_CONFIDENCE_THRESHOLD`   | `0.55`             | Shared threshold for fall declaration         |
+| `FALL_COOLDOWN_FRAMES`        | `30`               | LSTM event cooldown window                    |
 
 Fall detection thresholds are tunable at the top of `models/fall_detection.py`:
 
@@ -487,6 +491,8 @@ FaceDoor is designed with **PIPEDA** (Canada) and **GDPR** compliance in mind:
 |---------------------------------------|------------------------------------------------------------|
 | `scripts/fall_detection_camera.py`    | Live webcam fall detection — Phase 1 rules or Phase 2 LSTM (`--lstm` flag) |
 | `scripts/extract_keypoints.py`        | Extract MediaPipe pose keypoints from URFD videos → CSVs in `data/keypoints/` |
+| `scripts/evaluate_lstm.py`            | Evaluate trained LSTM model and write report to `models/lstm_eval_report.txt` |
+| `scripts/system_health_check.py`      | Check DB, model artifacts, API health, and fall detector status |
 | `scripts/capture_faces.py`            | Capture face photos from webcam for registration           |
 | `scripts/register_faces.py`           | Register captured photos, extract HOG features             |
 | `scripts/clear_database.py`           | Reset the SQLite DB (preserves `data/samples/`)            |
@@ -497,6 +503,7 @@ FaceDoor is designed with **PIPEDA** (Canada) and **GDPR** compliance in mind:
 | `tests/test_face_recognition_real.py` | Extended webcam + photo recognition tests                  |
 | `tests/test_integration.py`           | End-to-end pipeline integration tests                      |
 | `tests/test_api_recognize.py`         | API-level tests for `/api/recognize`                       |
+| `tests/test_fall_detection.py`        | Fall route and repeated-falls unit tests                   |
 
 ---
 

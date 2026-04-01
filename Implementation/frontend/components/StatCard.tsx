@@ -1,7 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import KpiAnimatedVisual from "@/components/dashboard/KpiAnimatedVisual";
+import dynamic from "next/dynamic";
+const KpiAnimatedVisual = dynamic(
+  () => import("@/components/dashboard/KpiAnimatedVisual"),
+  { ssr: false }
+);
 import KpiHealthPill from "@/components/dashboard/KpiHealthPill";
 import SparkMicroChart from "@/components/SparkMicroChart";
 import type { KpiHealth } from "@/lib/dashboardKpiHealth";

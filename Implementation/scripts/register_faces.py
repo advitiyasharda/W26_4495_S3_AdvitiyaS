@@ -2,14 +2,14 @@
 Face Registration Utility - Register captured faces in the system
 Adds people to database and facial recognition engine.
 
-Run from project root:
-  python3 scripts/register_faces.py
+Run from anywhere:
+  python scripts/register_faces.py
 """
 import sys
 from pathlib import Path
 
-# Ensure project root is on sys.path so 'data' and 'api' can be imported
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
 
 from data.database import Database
 from api.facial_recognition import FacialRecognitionEngine
@@ -38,28 +38,17 @@ class FaceRegistration:
             True if successful
         """
         try:
-            # Add to database
-            if not self.db.add_user(person_id, name, role):
-                print(f"  [FAIL] Could not add to database (database may be locked).")
-                print(f"     Stop the Flask server and try again.")
-                return False
-            
-            print(f"  [OK] Added to database: {person_id}")
-            
-            # Try to extract real face encodings from data/samples/{name}/
-            # Use the folder name derived from the display name (spaces → underscores, lower)
+            # Resolve photo directory before touching the DB (avoids ghost users)
             folder_name = name.replace(' ', '_').lower()
-            photo_dir = Path(f'data/samples/{folder_name}')
-            
-            # Also try exact name as typed in case the folder matches it directly
+            photo_dir = BASE_DIR / 'data' / 'samples' / folder_name
             if not photo_dir.exists():
-                photo_dir = Path(f'data/samples/{name}')
-            
+                photo_dir = BASE_DIR / 'data' / 'samples' / name
+
+            encodings_to_register = []
+            quality_skipped = 0
+
             if photo_dir.exists():
                 photos = list(photo_dir.glob('*.jpg')) + list(photo_dir.glob('*.png'))
-                encodings_registered = 0
-                quality_skipped = 0
-
                 for photo_path in photos:
                     frame = cv2.imread(str(photo_path))
                     if frame is None:
@@ -67,7 +56,7 @@ class FaceRegistration:
                     faces = self.engine.detect_faces(frame)
                     if len(faces) == 0:
                         continue
-                    x, y, w, h = faces[0]
+                    x, y, w, h = (int(v) for v in faces[0])
                     face_roi = frame[y:y+h, x:x+w]
 
                     quality = self.engine._score_face_quality(face_roi)
@@ -78,21 +67,35 @@ class FaceRegistration:
 
                     encoding = self.engine._extract_face_features(face_roi)
                     if encoding is not None:
-                        self.engine.register_face(person_id, name, encoding)
-                        encodings_registered += 1
+                        encodings_to_register.append(encoding)
 
                 if quality_skipped:
                     print(f"  [!] {quality_skipped} photo(s) skipped (poor quality)")
-                if encodings_registered > 0:
-                    print(f"  [OK] Registered {encodings_registered} face encoding(s) from {photo_dir}/")
-                else:
-                    print(f"  [!] Found photo folder but could not extract any face encodings.")
-                    print(f"     Check photo quality, or recapture with: python scripts/capture_faces.py")
+
+                if not encodings_to_register:
+                    print(f"  [FAIL] Could not extract any face encodings from {photo_dir}/")
+                    print(f"     Check photo quality or recapture: python scripts/capture_faces.py")
+                    return False
             else:
-                print(f"  [!] No photo folder found at data/samples/{folder_name}/")
-                print(f"     Person added to DB only. Capture photos first, then use Option 2")
-                print(f"     to register face encodings: python scripts/capture_faces.py")
-            
+                print(f"  [!] No photo folder found at {photo_dir}")
+                print(f"     Capture photos first: python scripts/capture_faces.py")
+                print(f"     Then use Option 2 to register from photos.")
+                # Still add to DB so the person exists; encodings can be added later
+                # via Option 2 once photos are captured.
+
+            # Now add to database — only after we know encoding extraction succeeded
+            if not self.db.add_user(person_id, name, role):
+                print(f"  [FAIL] Could not add to database (may be locked — stop the Flask server).")
+                return False
+
+            print(f"  [OK] Added to database: {person_id}")
+
+            for encoding in encodings_to_register:
+                self.engine.register_face(person_id, name, encoding)
+
+            if encodings_to_register:
+                print(f"  [OK] Registered {len(encodings_to_register)} face encoding(s) from {photo_dir}/")
+
             return True
         except Exception as e:
             print(f"  [FAIL] Error: {e}")
@@ -107,16 +110,16 @@ class FaceRegistration:
             person_id: Unique identifier (e.g., 'resident_001')
             role: 'resident' or 'caregiver'
         """
-        photo_dir = f'data/samples/{person_name}'
-        
+        photo_dir = BASE_DIR / 'data' / 'samples' / person_name
+
         # Check if photos exist
-        if not Path(photo_dir).exists():
+        if not photo_dir.exists():
             print(f"[FAIL] No photos found at: {photo_dir}")
             print(f"  Run: python scripts/capture_faces.py")
             return False
-        
+
         # Count photos
-        photos = [f for f in Path(photo_dir).iterdir() if f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
+        photos = [f for f in photo_dir.iterdir() if f.suffix.lower() in ['.jpg', '.jpeg', '.png']]
         if not photos:
             print(f"[FAIL] No image files found in: {photo_dir}")
             return False

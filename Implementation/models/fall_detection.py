@@ -47,18 +47,24 @@ LEFT_KNEE      = 25
 RIGHT_KNEE     = 26
 
 # ── Tunable thresholds ──────────────────────────────────────────────────────
-FALL_THRESHOLD        = 0.55   # weighted confidence to declare a fall
+FALL_THRESHOLD        = 0.52   # weighted confidence to declare a fall
 HIP_HEIGHT_THRESHOLD  = 0.72   # normalised y; >this means hips are near floor
                                 # (MediaPipe y=0 at top, y=1 at bottom)
 TORSO_ANGLE_THRESHOLD = 50.0   # degrees from vertical; >this = torso tilted
-VELOCITY_THRESHOLD    = 0.07   # normalised-y drop per frame; >this = fast drop
-VELOCITY_WINDOW       = 8      # frames to track for velocity
+VELOCITY_THRESHOLD    = 0.05   # normalised-y drop per frame; >this = fast drop
+                                # lowered from 0.07 — quick falls at lower fps
+                                # produce smaller per-frame drops
+VELOCITY_WINDOW       = 5      # frames to track for velocity (was 8)
+                                # shorter window catches falls that complete in
+                                # 3–4 frames (~0.1 s at 30 fps)
 MIN_VISIBILITY        = 0.4    # ignore landmarks below this visibility score
 
 # Rule weights (must sum to 1.0)
-W_HIP_HEIGHT  = 0.40
-W_TORSO_ANGLE = 0.35
-W_VELOCITY    = 0.25
+# Velocity carries more weight now so a fast drop triggers detection even
+# before hips reach the floor and the torso has gone fully horizontal.
+W_HIP_HEIGHT  = 0.35
+W_TORSO_ANGLE = 0.30
+W_VELOCITY    = 0.35
 
 
 @dataclass
@@ -155,7 +161,10 @@ class FallDetector:
         detection = self._landmarker.detect(mp_img)
 
         if not detection.pose_landmarks or len(detection.pose_landmarks) == 0:
-            self._hip_y_history.clear()
+            # Do NOT clear history here — during a fast fall MediaPipe often
+            # misses one frame (unusual mid-air pose, motion blur). Clearing
+            # would wipe the pre-fall standing position and kill the velocity
+            # signal. Instead let the deque age out naturally.
             return FallResult(
                 is_fall=False, confidence=0.0,
                 reason="No person detected",
@@ -337,7 +346,7 @@ class FallDetector:
     @staticmethod
     def _velocity_score(velocity: float) -> float:
         lo = VELOCITY_THRESHOLD
-        hi = VELOCITY_THRESHOLD * 2.0
+        hi = VELOCITY_THRESHOLD * 1.6   # reach full score sooner (was 2.0×)
         if velocity <= lo:
             return 0.0
         if velocity >= hi:

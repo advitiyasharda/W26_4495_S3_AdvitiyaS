@@ -5,14 +5,16 @@ Uses OpenCV for face detection and recognition
 import cv2
 import numpy as np
 import logging
+import json
 from collections import deque, Counter
 from datetime import datetime
+from pathlib import Path
 from typing import Tuple, List, Optional
 
 logger = logging.getLogger(__name__)
 
 # Match when distance is below this. Live webcam needs higher (0.55); stored photos work with lower.
-DISTANCE_MATCH_THRESHOLD = 0.55
+DISTANCE_MATCH_THRESHOLD = 0.3
 # When second-best is a *different* person, best must be this much closer (avoids wrong match).
 MIN_DISTANCE_MARGIN_DIFFERENT_PERSON = 0.05
 
@@ -320,6 +322,186 @@ class FacialRecognitionEngine:
             "reason":        reason,
         }
 
+    def _align_face(self, face_roi: np.ndarray,
+                    output_size: int = 112) -> np.ndarray:
+        """
+        Align a face ROI to a canonical pose before encoding.
+
+        When dlib (face_recognition) is available the eye positions come from
+        dlib's 68-point landmark model and we apply an affine warp to place
+        both eyes at fixed target coordinates.  This corrects in-plane
+        rotation so a 15° head tilt doesn't produce a completely different
+        encoding vector.
+
+        When dlib is not available we fall back to OpenCV's Haar eye
+        detector.  If eye detection fails for any reason we skip alignment
+        and return the resized ROI so the caller always gets a usable image.
+
+        Args:
+            face_roi:    BGR face crop (any size)
+            output_size: Side length of the square output image (default 112)
+
+        Returns:
+            Aligned (or plain-resized) BGR face image of shape
+            (output_size, output_size, 3).
+        """
+        try:
+            if USE_FACE_RECOGNITION_LIB and fr_lib is not None:
+                rgb = cv2.cvtColor(face_roi, cv2.COLOR_BGR2RGB)
+                h, w = rgb.shape[:2]
+                landmarks_list = fr_lib.face_landmarks(
+                    rgb, face_locations=[(0, w, h, 0)]
+                )
+                if landmarks_list:
+                    lm = landmarks_list[0]
+                    # Mean of the inner eye corner points
+                    left_eye  = np.mean(lm.get("left_eye",  []), axis=0)
+                    right_eye = np.mean(lm.get("right_eye", []), axis=0)
+
+                    if left_eye.size and right_eye.size:
+                        # Canonical eye positions inside output_size square
+                        # (roughly 30 % from each side, 35 % from top)
+                        desired_left  = np.array([output_size * 0.30, output_size * 0.35])
+                        desired_right = np.array([output_size * 0.70, output_size * 0.35])
+
+                        dx = right_eye[0] - left_eye[0]
+                        dy = right_eye[1] - left_eye[1]
+                        angle  = np.degrees(np.arctan2(dy, dx))
+                        scale  = (np.linalg.norm(desired_right - desired_left)
+                                  / (np.linalg.norm(right_eye - left_eye) + 1e-6))
+                        center = tuple(((left_eye + right_eye) / 2).astype(int))
+
+                        M = cv2.getRotationMatrix2D(center, angle, scale)
+                        # Shift so the eye midpoint lands in the right spot
+                        M[0, 2] += (output_size / 2) - center[0]
+                        M[1, 2] += (output_size * 0.35) - center[1]
+
+                        aligned = cv2.warpAffine(
+                            face_roi, M, (output_size, output_size),
+                            flags=cv2.INTER_LINEAR,
+                            borderMode=cv2.BORDER_REPLICATE,
+                        )
+                        return aligned
+
+            # OpenCV Haar eye detector fallback
+            gray = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
+            eye_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_eye.xml'
+            )
+            eyes = eye_cascade.detectMultiScale(gray, 1.1, 5, minSize=(15, 15))
+
+            if len(eyes) >= 2:
+                # Sort left-to-right
+                eyes = sorted(eyes, key=lambda e: e[0])
+                lx, ly, lw, lh = eyes[0]
+                rx, ry, rw, rh = eyes[1]
+                left_eye  = np.array([lx + lw / 2, ly + lh / 2])
+                right_eye = np.array([rx + rw / 2, ry + rh / 2])
+
+                desired_left  = np.array([output_size * 0.30, output_size * 0.35])
+                desired_right = np.array([output_size * 0.70, output_size * 0.35])
+
+                dx = right_eye[0] - left_eye[0]
+                dy = right_eye[1] - left_eye[1]
+                angle  = np.degrees(np.arctan2(dy, dx))
+                scale  = (np.linalg.norm(desired_right - desired_left)
+                          / (np.linalg.norm(right_eye - left_eye) + 1e-6))
+                center = tuple(((left_eye + right_eye) / 2).astype(int))
+
+                M = cv2.getRotationMatrix2D(center, angle, scale)
+                M[0, 2] += (output_size / 2) - center[0]
+                M[1, 2] += (output_size * 0.35) - center[1]
+
+                aligned = cv2.warpAffine(
+                    face_roi, M, (output_size, output_size),
+                    flags=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_REPLICATE,
+                )
+                return aligned
+
+        except Exception as e:
+            logger.debug(f"Face alignment skipped: {e}")
+
+        # No landmarks / eye detection failed — plain resize as fallback
+        return cv2.resize(face_roi, (output_size, output_size))
+
+    # ── Encoding persistence ──────────────────────────────────────────────────
+
+    def save_encodings(self, path: str) -> bool:
+        """
+        Persist all registered face encodings to a .npz file on disk.
+
+        Call this after a registration session so the engine can be
+        restored at next startup without re-processing every photo.
+
+        Args:
+            path: File path to write, e.g. 'models/face_encodings.npz'
+
+        Returns:
+            True on success.
+        """
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            arrays = {}
+            meta   = {}
+            for person_id, encodings in self.known_faces.items():
+                key = f"enc_{person_id}"
+                arrays[key] = np.array(encodings, dtype=np.float32)
+                meta[person_id] = self.person_names.get(person_id, person_id)
+
+            np.savez_compressed(path, **arrays)
+            # Store name mapping alongside the .npz
+            meta_path = str(path).replace('.npz', '_meta.json')
+            with open(meta_path, 'w') as f:
+                json.dump(meta, f, indent=2)
+
+            logger.info(f"Saved {len(self.known_faces)} person(s) to {path}")
+            return True
+        except Exception as e:
+            logger.error(f"Could not save encodings: {e}")
+            return False
+
+    def load_encodings(self, path: str) -> int:
+        """
+        Load face encodings previously saved with save_encodings().
+
+        Merges loaded persons into the current known_faces dict so you
+        can call this multiple times (e.g. load base set then add guests).
+
+        Args:
+            path: Path to the .npz file written by save_encodings()
+
+        Returns:
+            Number of persons loaded (0 on failure).
+        """
+        try:
+            npz_path  = Path(path)
+            meta_path = Path(str(path).replace('.npz', '_meta.json'))
+
+            if not npz_path.exists():
+                logger.warning(f"Encodings file not found: {path}")
+                return 0
+
+            data = np.load(str(npz_path))
+            meta: dict = {}
+            if meta_path.exists():
+                with open(meta_path) as f:
+                    meta = json.load(f)
+
+            loaded = 0
+            for key in data.files:
+                person_id = key.replace('enc_', '', 1)
+                encodings = [data[key][i] for i in range(len(data[key]))]
+                self.known_faces[person_id]  = encodings
+                self.person_names[person_id] = meta.get(person_id, person_id)
+                loaded += 1
+
+            logger.info(f"Loaded {loaded} person(s) from {path}")
+            return loaded
+        except Exception as e:
+            logger.error(f"Could not load encodings: {e}")
+            return 0
+
     def _extract_face_features(self, face_roi: np.ndarray) -> Optional[np.ndarray]:
         """
         Extract feature vector from face image.
@@ -334,7 +516,10 @@ class FacialRecognitionEngine:
         try:
             if face_roi is None or face_roi.size == 0:
                 return None
-            
+
+            # Align face to canonical pose before encoding
+            face_roi = self._align_face(face_roi)
+
             # Prefer face_recognition (dlib) - much better accuracy for live webcam
             if USE_FACE_RECOGNITION_LIB and fr_lib is not None:
                 rgb = cv2.cvtColor(face_roi, cv2.COLOR_BGR2RGB)
@@ -344,7 +529,7 @@ class FacialRecognitionEngine:
                 if encodings:
                     return encodings[0].astype(np.float32)
                 return None
-            
+
             # OpenCV fallback
             resized = cv2.resize(face_roi, (64, 64))
             gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)

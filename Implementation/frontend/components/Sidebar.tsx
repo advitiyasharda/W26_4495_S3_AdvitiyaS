@@ -74,14 +74,18 @@ const sectionLabelTint: Record<string, string> = {
 
 const sections: {
   label: string;
+  /** Thin rule below this section (e.g. after Dashboard, after Security group). */
+  separatorAfter?: boolean;
   items: { href: string; label: string; icon: keyof typeof icons; accent: NavAccent }[];
 }[] = [
   {
     label: "MONITORING",
+    separatorAfter: true,
     items: [{ href: "/", label: "Dashboard", icon: "dashboard", accent: "teal" }],
   },
   {
     label: "SECURITY",
+    separatorAfter: true,
     items: [
       { href: "/alerts", label: "Alerts", icon: "alerts", accent: "amber" },
       { href: "/falls", label: "Falls", icon: "falls", accent: "rose" },
@@ -94,6 +98,16 @@ const sections: {
     items: [{ href: "/compliance", label: "Audit Trail", icon: "compliance", accent: "indigo" }],
   },
 ];
+
+function NavSeparator() {
+  return (
+    <div
+      className="mx-1 my-2 h-px bg-gradient-to-r from-transparent via-slate-200/90 to-transparent"
+      role="separator"
+      aria-hidden="true"
+    />
+  );
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
@@ -155,6 +169,7 @@ export default function Sidebar() {
                 );
               })}
             </ul>
+            {section.separatorAfter ? <NavSeparator /> : null}
           </div>
         ))}
       </nav>

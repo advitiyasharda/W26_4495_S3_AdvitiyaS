@@ -42,12 +42,6 @@ export function objectsHealth(objects: ObjectDetectionEvent[]): KpiHealth {
   return "normal";
 }
 
-export function cameraHealth(fallReady: boolean, objectReady: boolean): KpiHealth {
-  if (!fallReady && !objectReady) return "critical";
-  if (!fallReady || !objectReady) return "watch";
-  return "normal";
-}
-
 export const KPI_HEALTH_LABEL: Record<KpiHealth, string> = {
   normal: "Normal",
   watch: "Watch",

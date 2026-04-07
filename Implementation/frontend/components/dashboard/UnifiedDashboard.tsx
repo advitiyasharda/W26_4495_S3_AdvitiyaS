@@ -40,7 +40,7 @@ import {
 } from "@/lib/demoData";
 import { emptyOrDemo, nullOrDemo } from "@/lib/demoMode";
 import { fallConfidenceHistogram, fallsPerDay } from "@/lib/chartPrep";
-import { chart as C, statSpark } from "@/lib/theme";
+import { chart as C } from "@/lib/theme";
 import {
   filterByTimeRange,
   rangeStartMs,
@@ -57,7 +57,6 @@ import PageHero from "@/components/PageHero";
 import { IconDoorPanel } from "@/components/icons/DoorIcons";
 import ThreatSeverityBar from "@/components/dashboard/ThreatSeverityBar";
 import DoorTrafficCard from "@/components/dashboard/DoorTrafficCard";
-import CameraPipelineCard from "@/components/dashboard/CameraPipelineCard";
 import StatCard from "@/components/StatCard";
 import KpiInsightModal from "@/components/dashboard/KpiInsightModal";
 import {
@@ -66,11 +65,9 @@ import {
   peakHourLabel,
   threatSeverityBreakdown,
 } from "@/lib/dashboardInsights";
-import { sparkEntries, sparkExits, sparkFalls, sparkObjects, sparkThreats } from "@/lib/dashboardCardSpark";
 import {
   accessTrafficHealth,
   alertsHealth,
-  cameraHealth,
   fallsHealth,
   objectsHealth,
 } from "@/lib/dashboardKpiHealth";
@@ -285,16 +282,6 @@ export default function UnifiedDashboard() {
   const alertHealth = useMemo(() => alertsHealth(threats), [threats]);
   const fallHealth = useMemo(() => fallsHealth(falls), [falls]);
   const objectHealth = useMemo(() => objectsHealth(objects), [objects]);
-  const camHealth = useMemo(
-    () => cameraHealth(!!fallStatus?.detector_ready, !!objectStatus?.detector_ready),
-    [fallStatus, objectStatus]
-  );
-
-  const sparkIn = useMemo(() => sparkEntries(logs), [logs]);
-  const sparkOut = useMemo(() => sparkExits(logs), [logs]);
-  const sparkT = useMemo(() => sparkThreats(threats), [threats]);
-  const sparkF = useMemo(() => sparkFalls(falls), [falls]);
-  const sparkO = useMemo(() => sparkObjects(objects), [objects]);
 
   const peakIn = useMemo(() => peakHourLabel(logs, "entry"), [logs]);
   const peakOut = useMemo(() => peakHourLabel(logs, "exit"), [logs]);
@@ -423,13 +410,11 @@ export default function UnifiedDashboard() {
         }
       />
 
-      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
         <DoorTrafficCard
           entries={entriesCount}
           exits={exitsCount}
           health={trafficHealth}
-          sparkIn={sparkIn}
-          sparkOut={sparkOut}
           rangeLabel={rangeLabel}
           peakIn={peakIn}
           peakOut={peakOut}
@@ -444,8 +429,7 @@ export default function UnifiedDashboard() {
           icon={<AlertIcon />}
           accent="amber"
           health={alertHealth}
-          spark={sparkT}
-          sparkColor={statSpark.alert.stroke}
+          visualKind="alerts"
           onClick={() => setInsight("alerts")}
         />
         <StatCard
@@ -455,8 +439,7 @@ export default function UnifiedDashboard() {
           icon={<FallIcon />}
           accent="rose"
           health={fallHealth}
-          spark={sparkF}
-          sparkColor={statSpark.fall.stroke}
+          visualKind="falls"
           onClick={() => setInsight("falls")}
         />
         <StatCard
@@ -466,17 +449,8 @@ export default function UnifiedDashboard() {
           icon={<ObjectIcon />}
           accent="violet"
           health={objectHealth}
-          spark={sparkO}
-          sparkColor={statSpark.status.stroke}
+          visualKind="objects"
           onClick={() => setInsight("objects")}
-        />
-        <CameraPipelineCard
-          health={camHealth}
-          fallReady={!!fallStatus?.detector_ready}
-          objectReady={!!objectStatus?.detector_ready}
-          weaponReady={!!objectStatus?.weapon_model_ready}
-          dataLinkOk={cameraOk}
-          onClick={() => setInsight("camera")}
         />
       </div>
 
@@ -650,9 +624,6 @@ export default function UnifiedDashboard() {
         threats={threats}
         falls={falls}
         objects={objects}
-        fallStatus={fallStatus}
-        objectStatus={objectStatus}
-        dataLinkOk={cameraOk}
         onJumpToSection={scrollToSection}
       />
     </div>

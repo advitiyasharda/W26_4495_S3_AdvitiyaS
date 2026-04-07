@@ -6,11 +6,6 @@ import {
   CartesianGrid,
   Line,
   LineChart,
-  PolarAngleAxis,
-  PolarGrid,
-  PolarRadiusAxis,
-  Radar,
-  RadarChart,
   ResponsiveContainer,
   Scatter,
   ScatterChart,
@@ -19,11 +14,11 @@ import {
   YAxis,
   ZAxis,
 } from "recharts";
-import type { AccessLog, FallEvent, FallStatusResponse, ObjectDetectionEvent, ObjectStatusResponse, Threat } from "@/lib/api";
+import type { AccessLog, FallEvent, ObjectDetectionEvent, Threat } from "@/lib/api";
 import type { InsightId } from "@/components/dashboard/dashboardCardTypes";
 import { chart as C } from "@/lib/theme";
 import { objectEventsPerHour } from "@/lib/objectAnalytics";
-import { cameraStackRadarData, fallIndexVsScore, hourlySingleType, threatCumulative } from "@/lib/insightChartData";
+import { fallIndexVsScore, hourlySingleType, threatCumulative } from "@/lib/insightChartData";
 
 const tip = { borderRadius: 12, fontSize: 11, border: "1px solid #e2e8f0" };
 
@@ -33,18 +28,12 @@ export default function InsightModalViz({
   threats,
   falls,
   objects,
-  fallStatus,
-  objectStatus,
-  dataLinkOk,
 }: {
   insight: InsightId;
   logs: AccessLog[];
   threats: Threat[];
   falls: FallEvent[];
   objects: ObjectDetectionEvent[];
-  fallStatus: FallStatusResponse | null;
-  objectStatus: ObjectStatusResponse | null;
-  dataLinkOk: boolean;
 }) {
   if (insight === "traffic") {
     if (logs.length === 0) {
@@ -144,47 +133,6 @@ export default function InsightModalViz({
     );
   }
 
-  if (insight === "camera") {
-    const readiness = cameraStackRadarData(fallStatus, objectStatus, dataLinkOk, logs);
-    return (
-      <div className="space-y-4">
-        <div className="rounded-xl bg-slate-50/50 border border-slate-100/80 p-3">
-          <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide mb-2">
-            Operational readiness (0–100 per axis)
-          </p>
-          <p className="text-[11px] text-slate-500 mb-3 leading-relaxed">
-            Fall, object, and weapon heads, ingest path, and access outcome quality in the selected window.
-          </p>
-          <ResponsiveContainer width="100%" height={280}>
-            <RadarChart cx="50%" cy="50%" outerRadius="78%" data={readiness}>
-              <PolarGrid stroke="#e2e8f0" />
-              <PolarAngleAxis dataKey="subject" tick={{ fontSize: 10, fill: "#64748b" }} />
-              <PolarRadiusAxis angle={90} domain={[0, 100]} tick={{ fontSize: 9, fill: "#94a3b8" }} />
-              <Radar
-                name="Readiness"
-                dataKey="readiness"
-                stroke={C.mint}
-                fill={C.mintSoft}
-                fillOpacity={0.35}
-                strokeWidth={2}
-              />
-              <Tooltip
-                contentStyle={tip}
-                formatter={(v: number | undefined) => (v != null ? [`${v}%`, "Readiness"] : ["—", "Readiness"])}
-              />
-            </RadarChart>
-          </ResponsiveContainer>
-        </div>
-
-        <CameraHealthViz
-          fallReady={!!fallStatus?.detector_ready}
-          objectReady={!!objectStatus?.detector_ready}
-          weaponReady={!!objectStatus?.weapon_model_ready}
-        />
-      </div>
-    );
-  }
-
   return null;
 }
 
@@ -204,41 +152,6 @@ function MiniHourly({ title, data, stroke }: { title: string; data: { hour: stri
           <Line type="monotone" dataKey="count" stroke={stroke} strokeWidth={2} dot={false} activeDot={{ r: 3 }} />
         </LineChart>
       </ResponsiveContainer>
-    </div>
-  );
-}
-
-function CameraHealthViz({
-  fallReady,
-  objectReady,
-  weaponReady,
-}: {
-  fallReady: boolean;
-  objectReady: boolean;
-  weaponReady: boolean;
-}) {
-  const rows = [
-    { label: "Fall pipeline", ok: fallReady, color: "bg-rose-200/80" },
-    { label: "Object pipeline", ok: objectReady, color: "bg-amber-200/80" },
-    { label: "Weapon model", ok: weaponReady, color: "bg-violet-200/80" },
-  ];
-  return (
-    <div className="rounded-xl bg-slate-50/50 border border-slate-100/80 p-4 space-y-3">
-      <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide">Pipeline detail</p>
-      {rows.map((r) => (
-        <div key={r.label}>
-          <div className="flex justify-between text-xs text-slate-600 mb-1">
-            <span>{r.label}</span>
-            <span className={r.ok ? "text-teal-700 font-medium" : "text-slate-400"}>{r.ok ? "On" : "Off"}</span>
-          </div>
-          <div className="h-2 rounded-full bg-slate-200/60 overflow-hidden">
-            <div
-              className={`h-full rounded-full transition-all duration-700 ease-out ${r.color}`}
-              style={{ width: r.ok ? "100%" : "18%" }}
-            />
-          </div>
-        </div>
-      ))}
     </div>
   );
 }

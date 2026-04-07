@@ -1,16 +1,21 @@
 "use client";
 
 import Link from "next/link";
+import KpiAnimatedVisual from "@/components/dashboard/KpiAnimatedVisual";
+import KpiHealthPill from "@/components/dashboard/KpiHealthPill";
 import SparkMicroChart from "@/components/SparkMicroChart";
 import type { KpiHealth } from "@/lib/dashboardKpiHealth";
-import { KPI_HEALTH_LABEL } from "@/lib/dashboardKpiHealth";
 
 export type StatCardAccent = "teal" | "sky" | "amber" | "rose" | "violet" | "cyan" | "indigo";
 
-const healthDot: Record<KpiHealth, string> = {
-  normal: "bg-teal-400/70 shadow-[0_0_0_3px_rgba(45,212,191,0.12)]",
-  watch: "bg-amber-400/75 shadow-[0_0_0_3px_rgba(251,191,36,0.12)]",
-  critical: "bg-red-600 ring-1 ring-red-200 shadow-[0_0_0_4px_rgba(239,68,68,0.26)]",
+const accentTier: Record<StatCardAccent, string> = {
+  teal: "bg-gradient-to-b from-teal-400/95 via-teal-500/85 to-cyan-400/75",
+  sky: "bg-gradient-to-b from-sky-400/95 via-sky-500/80 to-sky-400/70",
+  amber: "bg-gradient-to-b from-amber-400/95 via-orange-400/80 to-amber-400/75",
+  rose: "bg-gradient-to-b from-rose-400/95 via-rose-500/85 to-pink-400/70",
+  violet: "bg-gradient-to-b from-violet-400/95 via-purple-500/80 to-violet-400/75",
+  cyan: "bg-gradient-to-b from-cyan-400/95 via-teal-400/80 to-cyan-400/75",
+  indigo: "bg-gradient-to-b from-indigo-400/95 via-indigo-500/80 to-violet-400/75",
 };
 
 const iconShell: Record<StatCardAccent, string> = {
@@ -44,6 +49,8 @@ interface Props {
   selected?: boolean;
   className?: string;
   accent?: StatCardAccent;
+  /** Animated icon strip (replaces sparkline when set) */
+  visualKind?: "alerts" | "falls" | "objects";
   spark?: number[];
   sparkColor?: string;
   cardViz?: React.ReactNode;
@@ -62,6 +69,12 @@ function LiveBarsStrip({ accent }: { accent: StatCardAccent }) {
   );
 }
 
+function statusRingClass(health: KpiHealth | undefined): string {
+  if (health === "critical") return "kpi-card-critical-ring";
+  if (health === "watch") return "kpi-card-watch-ring";
+  return "";
+}
+
 export default function StatCard({
   title,
   value,
@@ -73,6 +86,7 @@ export default function StatCard({
   selected,
   className = "",
   accent = "teal",
+  visualKind,
   spark,
   sparkColor,
   cardViz,
@@ -81,14 +95,12 @@ export default function StatCard({
 }: Props) {
   const up = trend && trend.value >= 0;
 
-  const surface =
-    `kpi-card-surface stat-card-motion group ring-1 ring-white/60 p-5 flex flex-col gap-3 ` +
-    (selected ? "ring-teal-200/40 bg-white" : "");
-
-  const base = `${surface} ${className}`;
+  const healthSafe = health ?? "normal";
 
   const footer =
-    liveBars && accent ? (
+    visualKind ? (
+      <KpiAnimatedVisual kind={visualKind} health={healthSafe} />
+    ) : liveBars && accent ? (
       <LiveBarsStrip accent={accent} />
     ) : cardViz ? (
       cardViz
@@ -96,70 +108,100 @@ export default function StatCard({
       <SparkMicroChart values={spark} color={sparkColor} />
     ) : null;
 
-  const inner = (
-    <>
-      <div className="flex items-start justify-between gap-2">
-        <p className="text-[11px] font-medium text-slate-400 tracking-wide">{title}</p>
-        <div className="flex items-center gap-2 shrink-0">
-          {health && (
-            <>
-              <span className={`size-2.5 rounded-full shrink-0 ${healthDot[health]}`} aria-hidden />
-              <span className="text-[10px] font-medium text-slate-400">{KPI_HEALTH_LABEL[health]}</span>
-            </>
-          )}
-          {icon && (
-            <div
-              className={`w-8 h-8 rounded-xl flex items-center justify-center shrink-0 transition-transform duration-300 group-hover:scale-105 ${iconShell[accent]}`}
-            >
-              {icon}
-            </div>
-          )}
-        </div>
-      </div>
+  const surface =
+    `kpi-card-surface stat-card-motion group relative z-0 ring-1 ring-white/60 flex flex-row overflow-hidden p-0 ` +
+    statusRingClass(healthSafe) +
+    (selected ? " ring-teal-200/40 bg-white" : "");
 
-      <div className="flex items-end gap-2">
-        <span className="text-2xl font-semibold tracking-tight text-slate-800 tabular-nums leading-none">{value}</span>
-        {trend && (
-          <span
-            className={`flex items-center gap-0.5 text-[11px] font-medium mb-0.5 ${
-              up ? "text-teal-600/80" : "text-rose-400/85"
-            }`}
-          >
-            {up ? (
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <polyline points="18 15 12 9 6 15" />
-              </svg>
-            ) : (
-              <svg className="w-3 h-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
-                <polyline points="6 9 12 15 18 9" />
-              </svg>
+  const base = `${surface} ${className}`;
+  const stretch = "flex h-full min-h-0 w-full flex-row items-stretch text-left";
+
+  const body = (
+    <>
+      <div className={`w-1.5 shrink-0 self-stretch rounded-l-[1rem] ${accentTier[accent]}`} aria-hidden />
+      <div className="flex min-h-[12rem] min-w-0 flex-1 flex-col justify-between gap-4 p-5">
+        <div className="space-y-3">
+          <div className="flex items-start justify-between gap-2">
+            <p className="text-[11px] font-medium uppercase tracking-[0.14em] text-slate-500">{title}</p>
+            <div className="flex flex-wrap items-center justify-end gap-2">
+              {health != null ? <KpiHealthPill health={health} /> : null}
+              {icon ? (
+                <div
+                  className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-xl transition-transform duration-300 group-hover:scale-105 ${iconShell[accent]}`}
+                >
+                  {icon}
+                </div>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex items-end gap-2">
+            <span className="text-[1.65rem] font-semibold leading-none tracking-tight text-slate-800 tabular-nums">
+              {value}
+            </span>
+            {trend && (
+              <span
+                className={`mb-0.5 flex items-center gap-0.5 text-[11px] font-medium ${
+                  up ? "text-teal-600/80" : "text-rose-400/85"
+                }`}
+              >
+                {up ? (
+                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <polyline points="18 15 12 9 6 15" />
+                  </svg>
+                ) : (
+                  <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2.5}>
+                    <polyline points="6 9 12 15 18 9" />
+                  </svg>
+                )}
+                {Math.abs(trend.value)}%
+              </span>
             )}
-            {Math.abs(trend.value)}%
-          </span>
+          </div>
+        </div>
+
+        {(footer || sub) && (
+          <div className="space-y-0">
+            {footer ? (
+              visualKind ? (
+                <div className="rounded-xl border border-slate-100/90 bg-gradient-to-br from-slate-50/90 to-white/70 px-3 py-3 shadow-[0_1px_0_rgb(255_255_255_/_0.9)_inset]">
+                  <p className="mb-2 text-[9px] font-semibold uppercase tracking-[0.16em] text-slate-400">Live signal</p>
+                  {footer}
+                </div>
+              ) : (
+                <div className="flex min-h-[1rem] items-center opacity-90">{footer}</div>
+              )
+            ) : null}
+            {sub ? (
+              <div
+                className={`text-[11px] leading-snug text-slate-600 ${
+                  footer ? "mt-2 border-t border-slate-100/85 pt-2.5" : "border-t border-slate-100/85 pt-2.5"
+                }`}
+              >
+                {sub}
+              </div>
+            ) : null}
+          </div>
         )}
       </div>
-
-      {footer && <div className="min-h-[16px] flex items-center opacity-90">{footer}</div>}
-
-      {sub && <div className="text-[11px] text-slate-400 leading-snug border-t border-slate-100/80 pt-2.5">{sub}</div>}
     </>
   );
 
   if (href) {
     return (
-      <Link href={href} className={`${base} w-full text-left text-inherit no-underline block`}>
-        {inner}
+      <Link href={href} className={`${base} ${stretch} text-inherit no-underline`}>
+        {body}
       </Link>
     );
   }
 
   if (onClick) {
     return (
-      <button type="button" onClick={onClick} className={`${base} w-full text-left`}>
-        {inner}
+      <button type="button" onClick={onClick} className={`${base} ${stretch}`}>
+        {body}
       </button>
     );
   }
 
-  return <div className={base}>{inner}</div>;
+  return <div className={`${base} ${stretch}`}>{body}</div>;
 }

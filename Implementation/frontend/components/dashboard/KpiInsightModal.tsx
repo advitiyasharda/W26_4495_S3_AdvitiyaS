@@ -3,7 +3,7 @@
 import { useEffect } from "react";
 import Link from "next/link";
 import InsightModalViz from "@/components/dashboard/InsightModalViz";
-import type { AccessLog, FallEvent, FallStatusResponse, ObjectDetectionEvent, ObjectStatusResponse, Threat } from "@/lib/api";
+import type { AccessLog, FallEvent, ObjectDetectionEvent, Threat } from "@/lib/api";
 import type { DashboardScrollSection, InsightId } from "@/components/dashboard/dashboardCardTypes";
 
 const TITLES: Record<InsightId, string> = {
@@ -11,7 +11,6 @@ const TITLES: Record<InsightId, string> = {
   alerts: "Security alerts",
   falls: "Fall detection",
   objects: "Object detection",
-  camera: "Camera & pipelines",
 };
 
 const JUMP: Record<InsightId, DashboardScrollSection> = {
@@ -19,19 +18,13 @@ const JUMP: Record<InsightId, DashboardScrollSection> = {
   alerts: "security",
   falls: "safety",
   objects: "vision",
-  camera: "pipelines",
 };
 
-/** Full app routes for each KPI card (camera spans object + fall pipelines). */
 const PAGE_LINKS: Record<InsightId, { href: string; label: string }[]> = {
   traffic: [{ href: "/logs", label: "Access log" }],
   alerts: [{ href: "/alerts", label: "Alerts" }],
   falls: [{ href: "/falls", label: "Fall events" }],
   objects: [{ href: "/objects", label: "Object detection" }],
-  camera: [
-    { href: "/objects", label: "Object detection" },
-    { href: "/falls", label: "Fall detection" },
-  ],
 };
 
 export default function KpiInsightModal({
@@ -42,9 +35,6 @@ export default function KpiInsightModal({
   threats,
   falls,
   objects,
-  fallStatus,
-  objectStatus,
-  dataLinkOk,
   onJumpToSection,
 }: {
   insight: InsightId | null;
@@ -54,10 +44,6 @@ export default function KpiInsightModal({
   threats: Threat[];
   falls: FallEvent[];
   objects: ObjectDetectionEvent[];
-  fallStatus: FallStatusResponse | null;
-  objectStatus: ObjectStatusResponse | null;
-  /** Unified ingest / API path healthy (same signal as camera KPI card). */
-  dataLinkOk: boolean;
   onJumpToSection: (s: DashboardScrollSection) => void;
 }) {
   useEffect(() => {
@@ -99,16 +85,7 @@ export default function KpiInsightModal({
           </button>
         </div>
 
-        <InsightModalViz
-          insight={insight}
-          logs={logs}
-          threats={threats}
-          falls={falls}
-          objects={objects}
-          fallStatus={fallStatus}
-          objectStatus={objectStatus}
-          dataLinkOk={dataLinkOk}
-        />
+        <InsightModalViz insight={insight} logs={logs} threats={threats} falls={falls} objects={objects} />
 
         <div className="mt-5 pt-4 border-t border-slate-100 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
           <button

@@ -1,61 +1,101 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { getAuditLog, AuditEntry } from "@/lib/api";
 import { DEMO_AUDIT } from "@/lib/demoData";
+import { demoFallbackEnabled, emptyOrDemo } from "@/lib/demoMode";
 import AuditTable from "@/components/AuditTable";
+import PageHero from "@/components/PageHero";
+import ComplianceActionChart from "@/components/compliance/ComplianceActionChart";
+import { IconAuditTrail, IconDownload } from "@/components/icons/DoorIcons";
 
 export default function CompliancePage() {
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
-  const [limit, setLimit]     = useState(50);
+  const [limit, setLimit] = useState(50);
   const [usingDemo, setUsingDemo] = useState(false);
 
   const load = async (l: number) => {
     setLoading(true);
     const data = await getAuditLog(l);
-    if (data && data.audit_log.length > 0) {
-      setEntries(data.audit_log);
-      setUsingDemo(false);
-    } else {
-      setEntries(DEMO_AUDIT.slice(0, l));
-      setUsingDemo(true);
-    }
+    const merged = emptyOrDemo(data?.audit_log, DEMO_AUDIT);
+    setUsingDemo((data?.audit_log?.length ?? 0) === 0 && demoFallbackEnabled());
+    setEntries(merged.slice(0, Math.min(l, merged.length)));
     setLoading(false);
   };
 
-  useEffect(() => { load(limit); }, [limit]); // eslint-disable-line
+  useEffect(() => {
+    load(limit);
+  }, [limit]); // eslint-disable-line
+
+  const stats = useMemo(() => {
+    const ok = entries.filter((e) => e.result === "success").length;
+    const fail = entries.length - ok;
+    const access = entries.filter((e) => e.action === "ACCESS_GRANTED" || e.action === "ACCESS_DENIED").length;
+    return { ok, fail, access, total: entries.length };
+  }, [entries]);
 
   return (
     <div className="space-y-6">
-      <div className="flex items-start justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-slate-800">Audit Trail</h1>
-          <p className="text-sm text-slate-400 mt-0.5">PIPEDA &amp; GDPR compliance audit log</p>
-          {usingDemo && (
-            <span className="inline-block mt-1.5 bg-amber-50 text-amber-600 text-xs font-medium px-2.5 py-0.5 rounded-full border border-amber-200">
-              Demo data
-            </span>
-          )}
+      <PageHero
+        tone="indigo"
+        eyebrow="Governance · Smart entrance"
+        title="Audit trail"
+        icon={<IconAuditTrail className="w-6 h-6" />}
+        description={
+          <>
+            Tamper-evident record of door access, enrollments, exports, and configuration — structured for PIPEDA & GDPR
+            reviews.
+          </>
+        }
+        aside={
+          <div className="flex flex-wrap gap-2">
+            {usingDemo && (
+              <span className="bg-amber-50/95 text-amber-900 text-xs font-semibold px-2.5 py-1 rounded-full border border-amber-200/80">
+                Demo data
+              </span>
+            )}
+            <a
+              href="/api/compliance/audit?format=csv"
+              className="inline-flex items-center gap-2 bg-white/95 border border-violet-200/80 text-violet-900 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-violet-50/80 transition-colors shadow-sm"
+            >
+              <IconDownload className="w-4 h-4" />
+              Export CSV
+            </a>
+          </div>
+        }
+      />
+
+      {!loading && entries.length > 0 && (
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+          <div className="rounded-2xl border border-emerald-100/80 bg-emerald-50/40 px-4 py-3">
+            <p className="text-[11px] font-semibold text-emerald-900 uppercase tracking-wide">Successful steps</p>
+            <p className="text-2xl font-bold text-emerald-800 tabular-nums mt-0.5">{stats.ok}</p>
+          </div>
+          <div className="rounded-2xl border border-rose-100/80 bg-rose-50/35 px-4 py-3">
+            <p className="text-[11px] font-semibold text-rose-900 uppercase tracking-wide">Failed / denied</p>
+            <p className="text-2xl font-bold text-rose-800 tabular-nums mt-0.5">{stats.fail}</p>
+          </div>
+          <div className="rounded-2xl border border-teal-100/80 bg-teal-50/30 px-4 py-3">
+            <p className="text-[11px] font-semibold text-teal-900 uppercase tracking-wide">Door access rows</p>
+            <p className="text-2xl font-bold text-teal-900 tabular-nums mt-0.5">{stats.access}</p>
+            <p className="text-[10px] text-slate-500 mt-1">Granted + denied events</p>
+          </div>
+          <div className="rounded-2xl border border-slate-100 bg-slate-50/50 px-4 py-3">
+            <p className="text-[11px] font-semibold text-slate-600 uppercase tracking-wide">Events loaded</p>
+            <p className="text-2xl font-bold text-slate-800 tabular-nums mt-0.5">{stats.total}</p>
+          </div>
         </div>
-        <a
-          href="/api/compliance/audit?format=csv"
-          className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 text-sm font-medium px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
-            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-            <polyline points="7 10 12 15 17 10" />
-            <line x1="12" y1="15" x2="12" y2="3" />
-          </svg>
-          Export CSV
-        </a>
-      </div>
+      )}
+
+      <ComplianceActionChart entries={entries} />
 
       <AuditTable entries={entries} loading={loading} />
 
       <button
+        type="button"
         onClick={() => setLimit((p) => p + 50)}
-        className="flex items-center gap-2 bg-white border border-slate-200 text-slate-600 text-sm font-medium px-4 py-2 rounded-lg hover:bg-slate-50 transition-colors shadow-sm"
+        className="inline-flex items-center gap-2 bg-white border border-violet-200/70 text-violet-900 text-sm font-semibold px-4 py-2.5 rounded-xl hover:bg-violet-50/60 transition-colors shadow-sm"
       >
         Load more
       </button>

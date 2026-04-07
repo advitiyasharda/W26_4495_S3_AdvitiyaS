@@ -7,8 +7,8 @@ five categories with associated threat levels:
   Category          Threat level   Examples
   ─────────────────────────────────────────────────────────────────────
   WEAPON            CRITICAL       knife, scissors (COCO); gun (custom)
-  SECURITY_THREAT   HIGH/MEDIUM    backpack (odd-hour), sports equipment
-  PARCEL            INFO           handbag, suitcase, backpack (daytime)
+  SECURITY_THREAT   HIGH/MEDIUM    sports gear, ambiguous items (not luggage)
+  PARCEL            INFO/LOW       handbag, backpack, suitcase at the entrance
   MOBILITY_AID      INFO           wheelchair proxy objects
   OPERATIONAL       LOW            bottle, cup, chair near entrance
 
@@ -41,26 +41,23 @@ logger = logging.getLogger(__name__)
 _WEAPON_CLASSES: Dict[int, str] = {
     43: "knife",       # COCO 43 — knife
     76: "scissors",    # COCO 76 — scissors (can be used as weapon)
+    34: "baseball_bat",  # COCO 34 — blunt weapon / improvised
 }
 
-# Classes that are potential security threats (context-dependent)
+# Luggage & carriers at the door — classified as PARCEL (checked before generic threats)
+_PARCEL_CLASSES: Dict[int, str] = {
+    24: "backpack",
+    26: "handbag",
+    28: "suitcase",
+}
+
+# Non-luggage anomalies & sports equipment (no overlap with _PARCEL_CLASSES)
 _SECURITY_THREAT_CLASSES: Dict[int, str] = {
-    24: "backpack",    # COCO 24 — suspicious if at odd hours
-    26: "handbag",     # COCO 26 — left unattended
-    28: "suitcase",    # COCO 28 — unauthorized moving attempt
-    33: "sports_ball", # COCO 33 — proxy for thrown object
-    34: "baseball_bat",# COCO 34 — blunt weapon
+    33: "sports_ball",  # proxy for thrown object
     35: "baseball_glove",
     36: "skateboard",
     38: "tennis_racket",
-    74: "clock",       # standalone — unusual
-}
-
-# Classes that indicate a delivery / parcel
-_PARCEL_CLASSES: Dict[int, str] = {
-    26: "handbag",     # also parcel if left at door
-    28: "suitcase",    # luggage / overnight visitor
-    24: "backpack",    # delivery pack
+    74: "clock",        # unusual standalone object
 }
 
 # Classes that indicate mobility / medical aid
@@ -286,17 +283,19 @@ class ObjectDetector:
         if name_lower in _CUSTOM_WEAPON_NAMES:
             return "WEAPON", "CRITICAL"
 
-        # COCO weapons
+        # COCO weapons (knife, scissors = critical; bat = high)
         if cls_id in _WEAPON_CLASSES:
+            if cls_id == 34:
+                return "WEAPON", "HIGH"
             return "WEAPON", "CRITICAL"
 
-        # Security threats (backpack / bat / etc.)
-        if cls_id in _SECURITY_THREAT_CLASSES:
-            return "SECURITY_THREAT", _CATEGORY_SEVERITY["SECURITY_THREAT"]
-
-        # Parcels / deliveries — subset of security-threat classes
+        # Parcels / luggage at ingress — before generic threat bucket so 24/26/28 map here
         if cls_id in _PARCEL_CLASSES:
             return "PARCEL", _CATEGORY_SEVERITY["PARCEL"]
+
+        # Other security-relevant classes (sports equipment, ambiguous props)
+        if cls_id in _SECURITY_THREAT_CLASSES:
+            return "SECURITY_THREAT", _CATEGORY_SEVERITY["SECURITY_THREAT"]
 
         # Mobility aids
         if cls_id in _MOBILITY_AID_CLASSES:

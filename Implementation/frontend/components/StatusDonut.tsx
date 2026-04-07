@@ -5,7 +5,7 @@ import { AccessLog } from "@/lib/api";
 
 interface Props { logs: AccessLog[] }
 
-const COLORS = ["#10b981", "#f87171", "#fbbf24", "#94a3b8"];
+const COLORS = ["#5eead4", "#fda4af", "#fde68a", "#7dd3fc"];
 
 export default function StatusDonut({ logs }: Props) {
   const success = logs.filter((l) => l.status === "success").length;
@@ -50,7 +50,10 @@ export default function StatusDonut({ logs }: Props) {
               ))}
             </Pie>
             <Tooltip
-              formatter={(v: number) => [`${v} (${((v / total) * 100).toFixed(0)}%)`, ""]}
+              formatter={(v) => {
+                const n = typeof v === "number" ? v : 0;
+                return [`${n} (${total ? ((n / total) * 100).toFixed(0) : 0}%)`, ""];
+              }}
               contentStyle={{ fontSize: 12, borderRadius: 8, border: "1px solid #e2e8f0" }}
             />
           </PieChart>

@@ -5,6 +5,7 @@ import {
   ResponsiveContainer, Legend,
 } from "recharts";
 import { AccessLog } from "@/lib/api";
+import { chart as C } from "@/lib/theme";
 
 interface Props { logs: AccessLog[] }
 
@@ -71,8 +72,8 @@ export default function AccessChart({ logs }: Props) {
           iconSize={8}
           wrapperStyle={{ fontSize: 12, paddingTop: 12 }}
         />
-        <Bar dataKey="entries" name="Entries" fill="#10b981" radius={[4, 4, 0, 0]} />
-        <Bar dataKey="exits"   name="Exits"   fill="#94a3b8" radius={[4, 4, 0, 0]} />
+        <Bar dataKey="entries" name="Entries" fill={C.mint} radius={[4, 4, 0, 0]} />
+        <Bar dataKey="exits" name="Exits" fill={C.skySoft} radius={[4, 4, 0, 0]} />
       </BarChart>
     </ResponsiveContainer>
   );

@@ -76,6 +76,11 @@ def create_app(config_name="config"):
     from data.database import Database
     app.db = Database()
 
+    # PIPEDA data-retention: purge stale access_logs / anomalies on startup
+    purged = app.db.purge_expired_records()
+    if any(purged.values()):
+        logger.info("Startup retention purge: %s", purged)
+
     # Initialize face recognition engine and load encodings from data/samples/
     from api.facial_recognition import FacialRecognitionEngine
     app.face_engine = FacialRecognitionEngine()

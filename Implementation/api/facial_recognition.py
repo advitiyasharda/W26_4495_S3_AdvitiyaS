@@ -4,15 +4,23 @@ Facial Recognition Module for Access Control
 Default   : OpenCV Haar Cascade (detection) + OpenCV LBPH (encoding)
 Optional  : pass use_dlib=True to FacialRecognitionEngine to use dlib for
             both detection (HOG) and encoding (ResNet-128).
+
+Biometric data is encrypted at rest using Fernet (AES-128-CBC) before writing
+to disk, and decrypted on load.  The key is derived from config.ENCRYPTION_KEY.
 """
 import cv2
 import numpy as np
 import logging
 import json
+import io
+import base64
+import hashlib
 from collections import deque, Counter
 from datetime import datetime
 from pathlib import Path
 from typing import Tuple, List, Optional
+
+from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +41,20 @@ except ImportError:
 
 # Backward-compat alias — other files import this to check if dlib is installed
 USE_FACE_RECOGNITION_LIB = _DLIB_AVAILABLE
+
+
+def _get_fernet() -> Fernet:
+    """Derive a Fernet key from config.ENCRYPTION_KEY (any-length passphrase).
+
+    Fernet requires a 32-byte URL-safe base64 key.  We SHA-256 hash the
+    passphrase to get exactly 32 bytes, then base64-encode it.
+    """
+    try:
+        from config import ENCRYPTION_KEY
+    except ImportError:
+        ENCRYPTION_KEY = "default-encryption-key"
+    raw = hashlib.sha256(ENCRYPTION_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(raw))
 
 class RecognitionBuffer:
     """
@@ -499,10 +521,12 @@ class FacialRecognitionEngine:
 
     def save_encodings(self, path: str) -> bool:
         """
-        Persist all registered face encodings to a .npz file on disk.
+        Persist all registered face encodings to an encrypted file on disk.
 
-        Call this after a registration session so the engine can be
-        restored at next startup without re-processing every photo.
+        The encodings are serialised as a compressed .npz in memory, then
+        encrypted with Fernet (AES-128-CBC) using the key from config.py
+        before being written to *path*.  A separate encrypted JSON sidecar
+        stores the person-name mapping.
 
         Args:
             path: File path to write, e.g. 'models/face_encodings.npz'
@@ -512,6 +536,9 @@ class FacialRecognitionEngine:
         """
         try:
             Path(path).parent.mkdir(parents=True, exist_ok=True)
+            fernet = _get_fernet()
+
+            # Serialise arrays to an in-memory buffer, then encrypt
             arrays = {}
             meta   = {}
             for person_id, encodings in self.known_faces.items():
@@ -519,13 +546,19 @@ class FacialRecognitionEngine:
                 arrays[key] = np.array(encodings, dtype=np.float32)
                 meta[person_id] = self.person_names.get(person_id, person_id)
 
-            np.savez_compressed(path, **arrays)
-            # Store name mapping alongside the .npz
-            meta_path = str(path).replace('.npz', '_meta.json')
-            with open(meta_path, 'w') as f:
-                json.dump(meta, f, indent=2)
+            buf = io.BytesIO()
+            np.savez_compressed(buf, **arrays)
+            encrypted_data = fernet.encrypt(buf.getvalue())
 
-            logger.info(f"Saved {len(self.known_faces)} person(s) to {path}")
+            with open(path, 'wb') as f:
+                f.write(encrypted_data)
+
+            meta_path = str(path).replace('.npz', '_meta.json')
+            encrypted_meta = fernet.encrypt(json.dumps(meta).encode())
+            with open(meta_path, 'wb') as f:
+                f.write(encrypted_meta)
+
+            logger.info(f"Saved {len(self.known_faces)} person(s) to {path} (encrypted)")
             return True
         except Exception as e:
             logger.error(f"Could not save encodings: {e}")
@@ -535,28 +568,33 @@ class FacialRecognitionEngine:
         """
         Load face encodings previously saved with save_encodings().
 
-        Merges loaded persons into the current known_faces dict so you
-        can call this multiple times (e.g. load base set then add guests).
+        Decrypts the file with Fernet, then loads the .npz arrays.
+        Merges loaded persons into the current known_faces dict.
 
         Args:
-            path: Path to the .npz file written by save_encodings()
+            path: Path to the encrypted file written by save_encodings()
 
         Returns:
             Number of persons loaded (0 on failure).
         """
         try:
-            npz_path  = Path(path)
+            enc_path  = Path(path)
             meta_path = Path(str(path).replace('.npz', '_meta.json'))
 
-            if not npz_path.exists():
+            if not enc_path.exists():
                 logger.warning(f"Encodings file not found: {path}")
                 return 0
 
-            data = np.load(str(npz_path))
+            fernet = _get_fernet()
+
+            with open(enc_path, 'rb') as f:
+                decrypted = fernet.decrypt(f.read())
+            data = np.load(io.BytesIO(decrypted))
+
             meta: dict = {}
             if meta_path.exists():
-                with open(meta_path) as f:
-                    meta = json.load(f)
+                with open(meta_path, 'rb') as f:
+                    meta = json.loads(fernet.decrypt(f.read()).decode())
 
             loaded = 0
             for key in data.files:
@@ -566,7 +604,7 @@ class FacialRecognitionEngine:
                 self.person_names[person_id] = meta.get(person_id, person_id)
                 loaded += 1
 
-            logger.info(f"Loaded {loaded} person(s) from {path}")
+            logger.info(f"Loaded {loaded} person(s) from {path} (decrypted)")
             return loaded
         except Exception as e:
             logger.error(f"Could not load encodings: {e}")

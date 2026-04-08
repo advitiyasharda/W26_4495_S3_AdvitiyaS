@@ -4,6 +4,7 @@ Flask API Routes for Door Face Panels Smart Security System
 import base64
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 import cv2
 import numpy as np
@@ -333,15 +334,42 @@ def get_users():
 
 @api_bp.route("/users/<user_id>", methods=["DELETE"])
 def delete_user(user_id):
-    """Remove a registered user (DB + face engine)."""
+    """PIPEDA right-to-erasure: remove a user's DB records, face encodings,
+    and on-disk sample photos so no biometric data remains."""
     try:
         if not user_id:
             return jsonify({"error": "user_id required"}), 400
+
         db = get_db()
+        engine = current_app.face_engine
+
         if not db.delete_user(user_id):
             return jsonify({"error": "User not found or cannot be deleted"}), 404
-        current_app.face_engine.remove_face(user_id)
-        return jsonify({"status": "deleted", "user_id": user_id}), 200
+
+        engine.remove_face(user_id)
+
+        # Delete on-disk sample photos for this person
+        import shutil
+        samples_dir = Path("data/samples")
+        deleted_photos = False
+        if samples_dir.exists():
+            for d in samples_dir.iterdir():
+                if d.is_dir() and d.name == user_id:
+                    shutil.rmtree(d)
+                    deleted_photos = True
+                    logger.info("Deleted sample photos: %s", d)
+
+        # Rebuild encrypted encodings file without this person
+        from api import ENCODINGS_FILE
+        engine.save_encodings(ENCODINGS_FILE)
+
+        # Audit trail for the deletion itself
+        db.log_audit("USER_DELETED", user_id=user_id,
+                     resource="users", result="success",
+                     details=f"All data erased (photos={'yes' if deleted_photos else 'no'})")
+
+        return jsonify({"status": "deleted", "user_id": user_id,
+                        "photos_removed": deleted_photos}), 200
     except Exception as e:
         logger.exception("Error deleting user")
         return jsonify({"error": str(e)}), 500

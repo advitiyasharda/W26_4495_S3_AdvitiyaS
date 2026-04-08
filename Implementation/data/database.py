@@ -1,15 +1,20 @@
 """
 Database Module for SQLite Data Persistence
-Handles access logs, threats, audit trails, and user data
+Handles access logs, threats, audit trails, and user data.
+
+PIPEDA data-minimization: access_logs and anomalies older than
+DATA_RETENTION_DAYS are automatically purged on startup.
 """
 import sqlite3
 import json
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import List, Dict, Optional
 
 logger = logging.getLogger(__name__)
+
+DATA_RETENTION_DAYS = 90  # PIPEDA: purge access/anomaly records older than this
 
 class Database:
     """SQLite database manager for Door Face Panels system"""
@@ -473,3 +478,41 @@ class Database:
         except Exception as e:
             logger.error(f"Error getting database stats: {e}")
             return {}
+
+    # ── PIPEDA data-retention auto-purge ──────────────────────────────────
+
+    def purge_expired_records(self, retention_days: int = None) -> Dict[str, int]:
+        """Delete access_logs and anomalies older than *retention_days*.
+
+        Audit logs are deliberately kept longer for compliance evidence.
+        Call this once at application startup.
+
+        Returns:
+            Dict with table names and number of rows deleted.
+        """
+        days = retention_days or DATA_RETENTION_DAYS
+        cutoff = (datetime.now(timezone.utc) - timedelta(days=days)).isoformat()
+        deleted: Dict[str, int] = {}
+        try:
+            cursor = self.conn.cursor()
+            for table in ("access_logs", "anomalies"):
+                cursor.execute(
+                    f"DELETE FROM {table} WHERE timestamp < ?", (cutoff,)
+                )
+                deleted[table] = cursor.rowcount
+            self.conn.commit()
+            total = sum(deleted.values())
+            if total:
+                logger.info(
+                    "Data-retention purge (>%d days): %s", days, deleted
+                )
+                self.log_audit(
+                    "DATA_RETENTION_PURGE",
+                    resource="database",
+                    result="success",
+                    details=json.dumps({"cutoff_days": days, "deleted": deleted}),
+                )
+            return deleted
+        except Exception as e:
+            logger.error("Retention purge failed: %s", e)
+            return deleted

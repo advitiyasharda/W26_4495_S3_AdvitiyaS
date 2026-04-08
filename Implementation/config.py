@@ -39,10 +39,11 @@ MAX_UPLOAD_SIZE_MB = 10
 LOG_LEVEL = 'INFO'
 LOG_FILE = os.path.join(os.path.dirname(__file__), 'logs', 'doorface.log')
 
-# Security
+# Security & PIPEDA compliance
 ENCRYPTION_KEY = os.environ.get('ENCRYPTION_KEY', 'default-encryption-key')
 ENABLE_AUDIT_LOGGING = True
 ENABLE_ACCESS_CONTROL = True
+DATA_RETENTION_DAYS = int(os.environ.get('DATA_RETENTION_DAYS', '90'))
 
 # Hardware Configuration
 TARGET_DEVICE = 'raspberry_pi'  # 'raspberry_pi' or 'jetson_nano'

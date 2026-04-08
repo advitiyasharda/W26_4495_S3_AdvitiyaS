@@ -301,35 +301,114 @@ MediaPipe extracts 33 body skeleton landmarks per frame. Three rules are scored 
 
 | Rule | Weight | Trigger |
 |------|--------|---------|
-| Hip height | 40% | Hips near bottom of frame (person on floor) |
-| Torso angle | 35% | Spine tilted > 50° from vertical |
-| Drop velocity | 25% | Hips dropped rapidly across recent frames |
+| Hip height | 35% | Hips near bottom of frame (person on floor) |
+| Torso angle | 30% | Spine tilted > 50° from vertical |
+| Drop velocity | 35% | Hips dropped rapidly across recent frames |
 
 When combined confidence ≥ 0.55 → fall is declared and sent to the dashboard.
 
-> **Phase 2 (in progress):** LSTM model trained on the UR Fall Detection dataset. See below for setup instructions.
+A **cooldown** of ~30 frames (~1 second at 30 fps) prevents the same fall from triggering multiple alerts.
 
-### Fall Detection Phase 2 — LSTM Setup
+### Fall Detection Phase 2 — LSTM Model
 
-Phase 2 uses a trained LSTM model for higher accuracy fall detection (~93% on test set).
+Phase 2 uses a trained LSTM (Long Short-Term Memory) neural network for higher-accuracy fall detection. Instead of hand-tuned rules, the LSTM learns fall patterns from labelled video sequences.
 
-**Step 1 — Download the URFD dataset videos**
+**How it works:**
 
-Go to [https://fenix.ur.edu.pl/mkepski/ds/uf.html](https://fenix.ur.edu.pl/mkepski/ds/uf.html) and download:
-- All **Fall** sequences → Video column → cam0 (30 videos)
-- All **ADL** sequences → Video column → cam0 (40 videos)
-
-Place them into:
 ```
-data/urfd/Fall/          ← fall-01-cam0.mp4 ... fall-30-cam0.mp4
-data/urfd/Activities of Daily Living/   ← adl-01-cam0.mp4 ... adl-40-cam0.mp4
+Video frame → MediaPipe Pose (33 landmarks × 2 = 66 features)
+    → rolling window of 30 frames → StandardScaler normalisation
+    → LSTM model (fall_lstm.keras) → fall probability (0–1)
+    → threshold → FALL / NO FALL
 ```
 
-**Step 2 — Extract keypoints from all 70 videos**
+The LSTM does **not** process raw pixels. It processes **pose-landmark sequences** extracted by the same MediaPipe model used in Phase 1.
+
+#### Full LSTM Workflow (videos → trained model → live detection)
+
+**Step 1 — Prepare video dataset**
+
+You need two classes of `.mp4` videos:
+- **Fall videos** (people falling)
+- **ADL / normal videos** (walking, sitting, bending, standing)
+
+Place them into (create these folders if they don't exist):
+
+```
+data/urfd/Fall/                          ← fall videos (.mp4)
+data/urfd/Activities of Daily Living/    ← normal activity videos (.mp4)
+```
+
+> The original UR Fall Detection Dataset is available at [https://fenix.ur.edu.pl/mkepski/ds/uf.html](https://fenix.ur.edu.pl/mkepski/ds/uf.html) (30 fall + 40 ADL cam0 videos). You can also use your own videos.
+
+**Step 2 — Extract keypoints from videos**
+
 ```bash
-python3.11 scripts/extract_keypoints.py
+python3 scripts/extract_keypoints.py
 ```
-This runs MediaPipe Pose on every frame and saves 66 keypoints per frame to `data/keypoints/` (takes 5–15 mins).
+
+This reads every `.mp4` from both folders, runs MediaPipe Pose on each frame, and saves one CSV per video to `data/keypoints/`. Each CSV has 66 columns (x,y for 33 keypoints) plus a `label` column (1 = fall, 0 = normal).
+
+> Takes ~5–15 minutes depending on video count and hardware. If you already have CSVs in `data/keypoints/` from a previous extraction, new CSVs are added alongside them.
+
+**Step 3 — Train the LSTM model**
+
+```bash
+python3 scripts/train_lstm.py
+```
+
+This:
+1. Loads all keypoint CSVs from `data/keypoints/`
+2. Creates fixed-length sequences of 30 frames (sliding window with 50% overlap)
+3. Fits a StandardScaler on all features and saves it to `models/fall_lstm_scaler.pkl`
+4. Splits data 80/20 for training/testing
+5. Trains a 2-layer LSTM (64 → 32 units, dropout, batch normalisation) for up to 50 epochs with early stopping
+6. Saves the best model to `models/fall_lstm.keras`
+7. Prints accuracy, confusion matrix, and classification report
+
+**Step 4 — Evaluate the model (optional but recommended)**
+
+```bash
+python3 scripts/evaluate_lstm.py
+```
+
+Loads the trained model + scaler, runs predictions on all keypoint sequences, and saves a detailed report to `models/lstm_eval_report.txt`.
+
+**Step 5 — Run live fall detection with LSTM**
+
+```bash
+# Terminal 1 — Flask backend must be running
+python3 main.py
+
+# Terminal 2 — live camera with LSTM mode
+python3 scripts/fall_detection_camera.py --lstm
+```
+
+The camera script extracts pose landmarks per frame, builds a rolling 30-frame sequence, runs the LSTM model, and posts detected falls to the backend. Falls appear on the `/falls` dashboard page and as CRITICAL alerts on `/alerts`.
+
+> You can also set `FALL_DETECTOR_MODE=lstm` in `config.py` to use LSTM mode when the backend itself processes frames via `POST /api/fall/detect`.
+
+#### Summary of files involved
+
+| Step | Script | Reads | Creates |
+|------|--------|-------|---------|
+| 1 | *(manual)* | — | `.mp4` videos in `data/urfd/` |
+| 2 | `scripts/extract_keypoints.py` | Videos + `models/pose_landmarker.task` | `data/keypoints/*.csv` |
+| 3 | `scripts/train_lstm.py` | `data/keypoints/*.csv` | `models/fall_lstm.keras` + `models/fall_lstm_scaler.pkl` |
+| 4 | `scripts/evaluate_lstm.py` | Model + scaler + keypoints | `models/lstm_eval_report.txt` |
+| 5 | `scripts/fall_detection_camera.py --lstm` | Model + scaler + webcam | Posts to `POST /api/fall/log` |
+
+### Fall Alerting and Escalation
+
+When a fall is detected (by either Phase 1 or Phase 2), the backend:
+
+1. Stores an **anomaly** row in SQLite (`anomaly_type = "fall_detected"`, `anomaly_score = confidence`)
+2. Stores a **threat** row (`threat_type = "FALL_DETECTED"`, `severity = "CRITICAL"`)
+3. Checks for **repeated falls in the last 24 hours**:
+   - 2 falls → additional `REPEATED_FALLS_WARNING` threat (HIGH severity)
+   - 3+ falls → additional `REPEATED_FALLS_CRITICAL` threat (CRITICAL severity)
+
+If the LSTM detector cannot see enough of the body, it returns a visibility warning instead — this is logged as a LOW severity `CAMERA_VISIBILITY_WARNING` (not a fall event).
 
 ---
 
@@ -465,11 +544,11 @@ Fall detection thresholds are tunable at the top of `models/fall_detection.py`:
 
 | Setting                  | Default | Description                              |
 |--------------------------|---------|------------------------------------------|
-| `FALL_THRESHOLD`         | `0.55`  | Weighted confidence to declare a fall    |
+| `FALL_THRESHOLD`         | `0.52`  | Weighted confidence to declare a fall    |
 | `HIP_HEIGHT_THRESHOLD`   | `0.72`  | Normalised y position considered "floor" |
 | `TORSO_ANGLE_THRESHOLD`  | `50°`   | Degrees from vertical = lying down       |
-| `VELOCITY_THRESHOLD`     | `0.07`  | Normalised drop per frame = fast fall    |
-| `VELOCITY_WINDOW`        | `8`     | Frames tracked for velocity calculation  |
+| `VELOCITY_THRESHOLD`     | `0.05`  | Normalised drop per frame = fast fall    |
+| `VELOCITY_WINDOW`        | `5`     | Frames tracked for velocity calculation  |
 
 ---
 
@@ -491,6 +570,7 @@ FaceDoor is designed with **PIPEDA** (Canada) and **GDPR** compliance in mind:
 |---------------------------------------|------------------------------------------------------------|
 | `scripts/fall_detection_camera.py`    | Live webcam fall detection — Phase 1 rules or Phase 2 LSTM (`--lstm` flag) |
 | `scripts/extract_keypoints.py`        | Extract MediaPipe pose keypoints from URFD videos → CSVs in `data/keypoints/` |
+| `scripts/train_lstm.py`              | Train LSTM fall detection model from keypoint CSVs → `models/fall_lstm.keras` + scaler |
 | `scripts/evaluate_lstm.py`            | Evaluate trained LSTM model and write report to `models/lstm_eval_report.txt` |
 | `scripts/system_health_check.py`      | Check DB, model artifacts, API health, and fall detector status |
 | `scripts/capture_faces.py`            | Capture face photos from webcam for registration           |

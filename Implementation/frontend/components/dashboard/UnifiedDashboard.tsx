@@ -38,7 +38,7 @@ import {
   DEMO_OBJECT_STATUS,
   DEMO_FALL_STATUS,
 } from "@/lib/demoData";
-import { emptyOrDemo, nullOrDemo } from "@/lib/demoMode";
+import { emptyOrDemo, nullOrDemo, demoFallbackEnabled } from "@/lib/demoMode";
 import { fallConfidenceHistogram, fallsPerDay } from "@/lib/chartPrep";
 import { chart as C } from "@/lib/theme";
 import {
@@ -219,9 +219,10 @@ export default function UnifiedDashboard() {
       getObjectStatus(),
     ]);
 
-    const hasRealPeople = l?.logs.some((log) => log.person_id != null && log.name != null);
-    if (hasRealPeople) {
-      setLogsRaw(l!.logs);
+    const apiLogs = l?.logs ?? [];
+    const hasRealPeople = apiLogs.some((log) => log.person_id != null && log.name != null);
+    if (hasRealPeople || !demoFallbackEnabled()) {
+      setLogsRaw(apiLogs);
       setUsingDemo(false);
     } else {
       setLogsRaw(DEMO_LOGS);
@@ -229,7 +230,7 @@ export default function UnifiedDashboard() {
     }
 
     if (s) setStats(s);
-    else {
+    else if (demoFallbackEnabled()) {
       const entries = DEMO_LOGS.filter((x) => x.type === "entry").length;
       const exits = DEMO_LOGS.filter((x) => x.type === "exit").length;
       setStats({

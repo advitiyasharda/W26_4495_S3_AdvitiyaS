@@ -191,7 +191,13 @@ def run(args):
         logger.warning("--skip must be >= 1; defaulting to 1")
         args.skip = 1
 
-    cap = cv2.VideoCapture(args.camera)
+    # On Windows, CAP_DSHOW opens USB cameras much faster than the default backend.
+    # Fall back to default if DirectShow isn't available (Linux/Mac).
+    cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
+    if not cap.isOpened():
+        logger.warning("DirectShow open failed for camera %d, retrying with default backend…",
+                       args.camera)
+        cap = cv2.VideoCapture(args.camera)
     if not cap.isOpened():
         logger.error("Cannot open camera %d. Try a different --camera index.", args.camera)
         sys.exit(1)

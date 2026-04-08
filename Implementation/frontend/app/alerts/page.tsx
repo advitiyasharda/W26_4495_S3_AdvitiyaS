@@ -7,7 +7,8 @@ import { demoFallbackEnabled, emptyOrDemo } from "@/lib/demoMode";
 import AlertList from "@/components/AlertList";
 import PageHero from "@/components/PageHero";
 import AlertSeveritySummary from "@/components/alerts/AlertSeveritySummary";
-import { IconShieldAlert } from "@/components/icons/DoorIcons";
+import { IconDownload, IconShieldAlert } from "@/components/icons/DoorIcons";
+import { downloadCsv, threatsToCsvRows } from "@/lib/reportExport";
 
 type Filter = "ALL" | "HIGH" | "CRITICAL";
 
@@ -82,6 +83,15 @@ export default function AlertsPage() {
                 Sample data
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => downloadCsv(`alerts-${new Date().toISOString().slice(0, 10)}.csv`, threatsToCsvRows(threats))}
+              disabled={threats.length === 0}
+              className="inline-flex items-center gap-2 bg-white/95 border border-amber-200/80 text-amber-900 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-amber-50/80 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <IconDownload className="w-4 h-4" />
+              Export CSV
+            </button>
             <span
               className={`text-sm font-semibold px-3 py-1.5 rounded-full border ${
                 threats.length === 0

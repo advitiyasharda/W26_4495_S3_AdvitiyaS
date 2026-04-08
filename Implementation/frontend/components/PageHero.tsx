@@ -43,9 +43,9 @@ export default function PageHero({
 }: PageHeroProps) {
   return (
     <div
-      className={`relative overflow-hidden rounded-2xl border px-5 sm:px-6 py-5 shadow-sm ring-1 ${shells[tone]}`}
+      className={`relative rounded-2xl border px-5 sm:px-6 py-5 shadow-sm ring-1 ${shells[tone]}`}
     >
-      <div className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-white/40 blur-2xl" />
+      <div className="pointer-events-none absolute -right-8 -top-10 h-36 w-36 rounded-full bg-white/40 blur-2xl overflow-hidden" />
       <div className="relative flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
         <div className="flex gap-4 min-w-0">
           {icon && (

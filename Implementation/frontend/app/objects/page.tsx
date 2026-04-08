@@ -26,7 +26,8 @@ import { chart as chartPalette, objectCategoryFill, severityFill } from "@/lib/t
 import ObjectCategoryBar from "@/components/ObjectCategoryBar";
 import { ObjectCategoryIcon } from "@/components/icons/ObjectCategoryIcons";
 import PageHero from "@/components/PageHero";
-import { IconObjectFrame } from "@/components/icons/DoorIcons";
+import { IconDownload, IconObjectFrame } from "@/components/icons/DoorIcons";
+import { downloadCsv, objectsToCsvRows } from "@/lib/reportExport";
 import { DEMO_OBJECT_EVENTS, DEMO_OBJECT_STATUS } from "@/lib/demoData";
 import { demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoMode";
 
@@ -142,6 +143,15 @@ export default function ObjectsPage() {
                 Weapon model
               </span>
             )}
+            <button
+              type="button"
+              onClick={() => downloadCsv(`object-detections-${new Date().toISOString().slice(0, 10)}.csv`, objectsToCsvRows(filtered))}
+              disabled={filtered.length === 0}
+              className="inline-flex items-center gap-2 text-sm font-semibold px-3 py-1.5 rounded-xl border border-violet-200/80 bg-white text-violet-900 hover:bg-violet-50/80 shadow-sm transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <IconDownload className="w-4 h-4" />
+              Export CSV
+            </button>
             <button
               type="button"
               onClick={load}

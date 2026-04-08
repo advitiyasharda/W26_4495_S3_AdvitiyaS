@@ -8,9 +8,11 @@ import numpy as np
 from pathlib import Path
 import sys
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+BASE_DIR = Path(__file__).resolve().parent.parent
+sys.path.insert(0, str(BASE_DIR))
 
-from api.facial_recognition import FacialRecognitionEngine
+from api.facial_recognition import (FacialRecognitionEngine,
+                                    USE_FACE_RECOGNITION_LIB)
 from data.database import Database
 
 def diagnose_capture():
@@ -80,7 +82,7 @@ def diagnose_samples():
     print("SAMPLE PHOTOS DIAGNOSTICS")
     print("="*70)
     
-    sample_dir = Path('data/samples')
+    sample_dir = BASE_DIR / 'data' / 'samples'
     
     if not sample_dir.exists():
         print("  [FAIL] No sample directory found!")
@@ -164,7 +166,7 @@ def diagnose_recognition():
     print("="*70)
     
     engine = FacialRecognitionEngine()
-    sample_dir = Path('data/samples')
+    sample_dir = BASE_DIR / 'data' / 'samples'
     
     print("\n[1] Loading face encodings...")
     
@@ -285,10 +287,14 @@ def main():
     print("\n" + "="*70)
     print("FACE RECOGNITION SYSTEM DIAGNOSTICS")
     print("="*70)
-    
+
+    det = "OpenCV Haar Cascade"
+    enc = "dlib ResNet-128 (99.38% LFW)" if USE_FACE_RECOGNITION_LIB else "OpenCV LBPH (fallback)"
+    print(f"\n  Detector : {det}")
+    print(f"  Encoder  : {enc}")
+
     results = {}
-    
-    # Run diagnostics
+
     print("\nStep 1/5: Camera Setup")
     results['camera'] = diagnose_capture()
     

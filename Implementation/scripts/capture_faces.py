@@ -44,7 +44,8 @@ def _quality_color(passed: bool) -> tuple:
 
 
 def capture_face_images(person_name: str, num_photos: int = 20,
-                        auto_interval: float = 0.0) -> bool:
+                        auto_interval: float = 0.0,
+                        camera_index: int = 0) -> bool:
     """
     Capture face images from webcam with live quality feedback.
 
@@ -65,12 +66,18 @@ def capture_face_images(person_name: str, num_photos: int = 20,
     next_idx = max((int(p.stem.split('_')[-1]) for p in existing
                     if p.stem.split('_')[-1].isdigit()), default=0) + 1
 
+    print("Loading face detection engine...", end=" ", flush=True)
     engine = FacialRecognitionEngine()
+    print("OK")
 
-    cap = cv2.VideoCapture(0)
+    print(f"Opening camera {camera_index}...", end=" ", flush=True)
+    cap = cv2.VideoCapture(camera_index, cv2.CAP_DSHOW)
     if not cap.isOpened():
-        print("[ERROR] Webcam not found. Make sure it is connected and not in use.")
+        cap = cv2.VideoCapture(camera_index)
+    if not cap.isOpened():
+        print(f"\n[ERROR] Camera {camera_index} not found. Make sure it is connected and not in use.")
         return False
+    print("OK")
 
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
@@ -163,10 +170,12 @@ def capture_face_images(person_name: str, num_photos: int = 20,
                 do_capture = True
 
         if do_capture and face_rect is not None:
-            x, y, w, h = face_rect
-            face_roi = frame[y:y+h, x:x+w]
             filename = save_dir / f"{person_name}_{next_idx}.jpg"
-            cv2.imwrite(str(filename), face_roi)
+            # Save the full frame, not the face crop.
+            # register_faces.py re-runs detect_faces() on the saved image, and
+            # Haar cascade needs context (forehead, chin) around the face to work —
+            # it fails on tight face crops.
+            cv2.imwrite(str(filename), frame)
             print(f"  [OK] {filename.name}  (pose: {prompt})")
             captured += 1
             next_idx += 1
@@ -196,23 +205,42 @@ def main():
     parser = argparse.ArgumentParser(
         description="Capture registration photos for face recognition"
     )
-    parser.add_argument("--name",  required=True,
-                        help="Folder name for this person, e.g. 'john_doe'")
-    parser.add_argument("--count", type=int, default=20,
+    parser.add_argument("--name",  default=None,
+                        help="Folder name for this person, e.g. 'john_doe' "
+                             "(optional — you will be prompted if not provided)")
+    parser.add_argument("--count", type=int, default=None,
                         help="Number of photos to capture (default: 20)")
     parser.add_argument("--auto",  type=float, default=0.0,
                         help="Auto-capture interval in seconds (0 = manual SPACE, "
                              "e.g. --auto 2.0 captures every 2 seconds)")
+    parser.add_argument("--camera", type=int, default=0,
+                        help="Camera index (0 = built-in webcam, 1 = first external camera, "
+                             "2 = second external, etc.)")
     args = parser.parse_args()
 
+    print("\n" + "=" * 65)
+    print("DOOR FACE PANELS — FACE CAPTURE UTILITY")
+    print("=" * 65)
+
+    # Prompt interactively for anything not supplied on the command line
+    if not args.name:
+        args.name = input("Enter person name (e.g. john_doe): ").strip()
+        if not args.name:
+            print("ERROR: name cannot be empty.")
+            sys.exit(1)
+
+    if args.count is None:
+        count_str = input("How many photos to capture? [20]: ").strip()
+        args.count = int(count_str) if count_str.isdigit() else 20
+
     if args.count < 1:
-        print("ERROR: --count must be at least 1")
+        print("ERROR: count must be at least 1")
         sys.exit(1)
     if args.count > 100:
         print("WARNING: capping at 100 photos")
         args.count = 100
 
-    capture_face_images(args.name, args.count, args.auto)
+    capture_face_images(args.name, args.count, args.auto, args.camera)
 
 
 if __name__ == '__main__':

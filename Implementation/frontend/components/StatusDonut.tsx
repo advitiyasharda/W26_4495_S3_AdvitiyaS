@@ -5,7 +5,7 @@ import { AccessLog } from "@/lib/api";
 
 interface Props { logs: AccessLog[] }
 
-const COLORS = ["#10b981", "#f87171", "#fbbf24", "#94a3b8"];
+const COLORS = ["#5eead4", "#fda4af", "#fde68a", "#7dd3fc"];
 
 export default function StatusDonut({ logs }: Props) {
   const success = logs.filter((l) => l.status === "success").length;

@@ -11,26 +11,45 @@ from flask_cors import CORS
 logger = logging.getLogger(__name__)
 
 
-def _load_face_encodings_from_samples(engine, samples_dir="data/samples"):
-    """Load registered faces from data/samples/ into the engine."""
-    path = Path(samples_dir)
-    if not path.exists():
+ENCODINGS_FILE = "models/face_encodings.npz"
+
+
+def _load_face_encodings(engine):
+    """Load face encodings into the engine.
+
+    Strategy:
+      1. Try models/face_encodings.npz (instant — written by register_faces.py)
+      2. Fall back to re-processing every photo in data/samples/ (slow)
+
+    Returns the number of persons loaded.
+    """
+    # Fast path: load pre-built encodings
+    n = engine.load_encodings(ENCODINGS_FILE)
+    if n > 0:
+        logger.info("Loaded %d person(s) from %s (fast path)", n, ENCODINGS_FILE)
+        return n
+
+    # Slow fallback: reprocess photos
+    logger.info("No saved encodings found — reprocessing data/samples/ ...")
+    samples = Path("data/samples")
+    if not samples.exists():
         return 0
+
+    import cv2
     total = 0
-    for person_dir in path.iterdir():
+    for person_dir in samples.iterdir():
         if not person_dir.is_dir():
             continue
         person_name = person_dir.name
         photos = list(person_dir.glob("*.jpg")) + list(person_dir.glob("*.png"))
         for photo_path in photos:
             try:
-                import cv2
                 frame = cv2.imread(str(photo_path))
                 if frame is None:
                     continue
                 faces = engine.detect_faces(frame)
                 if len(faces) > 0:
-                    x, y, w, h = faces[0]
+                    x, y, w, h = (int(v) for v in faces[0])
                     face_roi = frame[y : y + h, x : x + w]
                     encoding = engine._extract_face_features(face_roi)
                     if encoding is not None:
@@ -38,6 +57,10 @@ def _load_face_encodings_from_samples(engine, samples_dir="data/samples"):
                         total += 1
             except Exception as e:
                 logger.warning("Failed to load %s: %s", photo_path.name, e)
+
+    if total > 0:
+        engine.save_encodings(ENCODINGS_FILE)
+        logger.info("Saved %d encodings to %s for next startup", total, ENCODINGS_FILE)
     return total
 
 
@@ -53,12 +76,17 @@ def create_app(config_name="config"):
     from data.database import Database
     app.db = Database()
 
+    # PIPEDA data-retention: purge stale access_logs / anomalies on startup
+    purged = app.db.purge_expired_records()
+    if any(purged.values()):
+        logger.info("Startup retention purge: %s", purged)
+
     # Initialize face recognition engine and load encodings from data/samples/
     from api.facial_recognition import FacialRecognitionEngine
     app.face_engine = FacialRecognitionEngine()
-    n = _load_face_encodings_from_samples(app.face_engine)
+    n = _load_face_encodings(app.face_engine)
     if n > 0:
-        logger.info("Loaded %d face encodings from data/samples/", n)
+        logger.info("Face engine ready: %d person(s) loaded", n)
 
     # Load anomaly detection model
     from models.anomaly_detection import AnomalyDetector

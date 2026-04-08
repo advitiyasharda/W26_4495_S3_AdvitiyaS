@@ -12,6 +12,9 @@ data/doorface.db
 models/*.task
 models/*.pt
 models/*.onnx
+# Face biometric templates — local only (regenerate via register_faces.py)
+models/face_encodings.npz
+models/face_encodings_meta.json
 # YOLOv8 training runs
 runs/
 

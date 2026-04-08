@@ -9,7 +9,6 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
-import cv2
 import numpy as np
 import os
 from pathlib import Path
@@ -217,7 +216,7 @@ def integration_test():
     print("\n[Recent Access Logs:]")
     logs = db.get_access_logs(limit=5)
     for log in logs:
-        print(f"   {log['user_id']} - {log['access_type']} at {log['timestamp']}")
+        print(f"   {log.get('person_id', log.get('user_id', '?'))} - {log.get('type', log.get('access_type', '?'))} at {log.get('timestamp', '?')}")
 
 def run_unit_tests():
     """

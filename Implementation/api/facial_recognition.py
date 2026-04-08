@@ -1,28 +1,60 @@
 """
 Facial Recognition Module for Access Control
-Uses OpenCV for face detection and recognition
+
+Default   : OpenCV Haar Cascade (detection) + OpenCV LBPH (encoding)
+Optional  : pass use_dlib=True to FacialRecognitionEngine to use dlib for
+            both detection (HOG) and encoding (ResNet-128).
+
+Biometric data is encrypted at rest using Fernet (AES-128-CBC) before writing
+to disk, and decrypted on load.  The key is derived from config.ENCRYPTION_KEY.
 """
 import cv2
 import numpy as np
 import logging
+import json
+import io
+import base64
+import hashlib
 from collections import deque, Counter
 from datetime import datetime
+from pathlib import Path
 from typing import Tuple, List, Optional
+
+from cryptography.fernet import Fernet
 
 logger = logging.getLogger(__name__)
 
-# Match when distance is below this. Live webcam needs higher (0.55); stored photos work with lower.
+# Match when distance is below this.
+# dlib uses its own threshold of 0.6 (set inline below).
+# OpenCV LBPH fallback: 0.55 is the right balance.
 DISTANCE_MATCH_THRESHOLD = 0.55
 # When second-best is a *different* person, best must be this much closer (avoids wrong match).
 MIN_DISTANCE_MARGIN_DIFFERENT_PERSON = 0.05
 
-# Optional: use face_recognition (dlib) library for much better accuracy. Fallback to OpenCV if not installed.
+# ── dlib / face_recognition (only used when use_dlib=True) ───────────────────
 try:
     import face_recognition as fr_lib
-    USE_FACE_RECOGNITION_LIB = True
+    _DLIB_AVAILABLE = True
 except ImportError:
     fr_lib = None
-    USE_FACE_RECOGNITION_LIB = False
+    _DLIB_AVAILABLE = False
+
+# Backward-compat alias — other files import this to check if dlib is installed
+USE_FACE_RECOGNITION_LIB = _DLIB_AVAILABLE
+
+
+def _get_fernet() -> Fernet:
+    """Derive a Fernet key from config.ENCRYPTION_KEY (any-length passphrase).
+
+    Fernet requires a 32-byte URL-safe base64 key.  We SHA-256 hash the
+    passphrase to get exactly 32 bytes, then base64-encode it.
+    """
+    try:
+        from config import ENCRYPTION_KEY
+    except ImportError:
+        ENCRYPTION_KEY = "default-encryption-key"
+    raw = hashlib.sha256(ENCRYPTION_KEY.encode()).digest()
+    return Fernet(base64.urlsafe_b64encode(raw))
 
 class RecognitionBuffer:
     """
@@ -91,53 +123,77 @@ class RecognitionBuffer:
 class FacialRecognitionEngine:
     """
     Handles face detection and recognition for access control.
-    Uses OpenCV cascade classifiers for detection.
+
+    Detection : OpenCV Haar Cascade (fast, no extra deps)
+    Encoding  : dlib ResNet-128 (preferred) or OpenCV LBPH fallback
     """
-    
-    def __init__(self, confidence_threshold=0.6):
-        """
-        Initialize facial recognition engine.
-        
-        Args:
-            confidence_threshold: Minimum confidence score for face match
-        """
+
+    def __init__(self, confidence_threshold=0.6, use_dlib=False):
         self.confidence_threshold = confidence_threshold
-        
-        # Load pre-trained cascade classifier
+        self.use_dlib = use_dlib and _DLIB_AVAILABLE
+
+        if use_dlib and not _DLIB_AVAILABLE:
+            logger.warning("use_dlib=True but face_recognition is not installed — falling back to OpenCV")
+
+        # ── Haar cascade (always loaded as fallback) ──────────────────────
         cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
         self.face_cascade = cv2.CascadeClassifier(cascade_path)
-        
-        # Known faces database (to be populated during setup)
-        self.known_faces = {}  # {person_id: [face_encodings]}
+
+        # ── CLAHE for low-light preprocessing ─────────────────────────────
+        self._clahe = cv2.createCLAHE(clipLimit=2.0, tileGridSize=(8, 8))
+
+        self.known_faces = {}   # {person_id: [face_encodings]}
         self.person_names = {}  # {person_id: name}
-        
-        # Per-engine smoothing buffer — keeps last 5 single-face results
-        # so one bad frame cannot deny access to a registered resident.
+
         self.buffer = RecognitionBuffer(maxlen=5, min_samples=3)
 
-        if USE_FACE_RECOGNITION_LIB:
-            logger.info("Facial Recognition Engine initialized (using face_recognition/dlib for best accuracy)")
-        else:
-            logger.info("Facial Recognition Engine initialized (OpenCV fallback; install 'face_recognition' for better results)")
-    
+        det_name = "dlib HOG" if self.use_dlib else "OpenCV Haar Cascade"
+        enc_name = "dlib ResNet-128" if self.use_dlib else "OpenCV LBPH"
+        logger.info(f"Facial Recognition Engine initialized  "
+                     f"(detect={det_name}, encode={enc_name})")
+
+    # ── Detection ─────────────────────────────────────────────────────────────
+
     def detect_faces(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
         """
-        Detect faces in a given frame.
-        
-        Args:
-            frame: Input image frame (BGR format)
-            
-        Returns:
-            List of face rectangles (x, y, w, h)
+        Detect faces in *frame* (BGR).
+
+        Returns a list of (x, y, w, h) bounding boxes.
+        Uses dlib HOG when use_dlib=True, otherwise OpenCV Haar Cascade.
         """
+        if self.use_dlib:
+            return self._detect_faces_dlib(frame)
+        return self._detect_faces_haar(frame)
+
+    def _detect_faces_dlib(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
+        """dlib HOG face detector — much more accurate than Haar cascade.
+
+        face_recognition.face_locations() returns (top, right, bottom, left)
+        tuples.  We convert to (x, y, w, h) to match the rest of our API.
+        """
+        rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        locations = fr_lib.face_locations(rgb, model="hog")
+        faces: List[Tuple[int, int, int, int]] = []
+        for (top, right, bottom, left) in locations:
+            x = left
+            y = top
+            w = right - left
+            h = bottom - top
+            if w >= 40 and h >= 40:
+                faces.append((x, y, w, h))
+        return faces
+
+    def _detect_faces_haar(self, frame: np.ndarray) -> List[Tuple[int, int, int, int]]:
+        """Haar Cascade detector with CLAHE for better low-light detection."""
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        gray = self._clahe.apply(gray)
         faces = self.face_cascade.detectMultiScale(
             gray,
-            scaleFactor=1.05,
-            minNeighbors=5,
-            minSize=(30, 30)
+            scaleFactor=1.1,
+            minNeighbors=4,
+            minSize=(50, 50)
         )
-        return faces
+        return [(int(x), int(y), int(w_), int(h_)) for x, y, w_, h_ in faces]
     
     def recognize_face(self, frame: np.ndarray, face_location: Tuple) -> Optional[dict]:
         """
@@ -188,7 +244,7 @@ class FacialRecognitionEngine:
         else:
             margin_ok = bool((second_best_distance - best_distance) >= MIN_DISTANCE_MARGIN_DIFFERENT_PERSON)
         
-        distance_threshold = 0.6 if USE_FACE_RECOGNITION_LIB else DISTANCE_MATCH_THRESHOLD
+        distance_threshold = 0.6 if self.use_dlib else DISTANCE_MATCH_THRESHOLD
         within_threshold = bool(best_distance < distance_threshold)
         # Use the active threshold as the denominator so confidence is always
         # relative to whichever engine (dlib or OpenCV) is actually running.
@@ -257,6 +313,42 @@ class FacialRecognitionEngine:
             logger.error(f"Error removing face: {e}")
             return False
 
+    # ── Preprocessing helpers ───────────────────────────────────────────────
+
+    def _apply_clahe(self, face_roi: np.ndarray) -> np.ndarray:
+        """Apply CLAHE contrast normalisation to the face ROI (BGR in, BGR out).
+
+        This dramatically improves encoding quality in uneven or low
+        lighting — the single biggest environmental factor in accuracy loss.
+        """
+        lab = cv2.cvtColor(face_roi, cv2.COLOR_BGR2LAB)
+        l, a, b = cv2.split(lab)
+        l = self._clahe.apply(l)
+        return cv2.cvtColor(cv2.merge([l, a, b]), cv2.COLOR_LAB2BGR)
+
+    @staticmethod
+    def _compute_lbp(gray: np.ndarray, radius: int = 1) -> np.ndarray:
+        """Compute a simple circular LBP (Local Binary Pattern) image.
+
+        LBP encodes the micro-texture around every pixel into an 8-bit code
+        by comparing the center pixel to its *radius*-distant neighbours.
+        This is far more discriminative for faces than raw gradient histograms.
+        """
+        h, w = gray.shape
+        lbp = np.zeros_like(gray)
+        offsets = [
+            (-radius,  0),      (-radius,  radius),
+            (0,        radius), ( radius,  radius),
+            ( radius,  0),      ( radius, -radius),
+            (0,       -radius), (-radius, -radius),
+        ]
+        for i, (dy, dx) in enumerate(offsets):
+            ny = np.clip(np.arange(h) + dy, 0, h - 1)
+            nx = np.clip(np.arange(w) + dx, 0, w - 1)
+            neighbor = gray[np.ix_(ny, nx)]
+            lbp |= ((neighbor >= gray).astype(np.uint8) << i)
+        return lbp
+
     def _score_face_quality(self, face_roi: np.ndarray) -> dict:
         """
         Score a face ROI on three quality dimensions before registration.
@@ -320,6 +412,204 @@ class FacialRecognitionEngine:
             "reason":        reason,
         }
 
+    def _align_face(self, face_roi: np.ndarray,
+                    output_size: int = 112) -> np.ndarray:
+        """
+        Align a face ROI to a canonical pose before encoding.
+
+        When dlib (face_recognition) is available the eye positions come from
+        dlib's 68-point landmark model and we apply an affine warp to place
+        both eyes at fixed target coordinates.  This corrects in-plane
+        rotation so a 15° head tilt doesn't produce a completely different
+        encoding vector.
+
+        When dlib is not available we fall back to OpenCV's Haar eye
+        detector.  If eye detection fails for any reason we skip alignment
+        and return the resized ROI so the caller always gets a usable image.
+
+        Args:
+            face_roi:    BGR face crop (any size)
+            output_size: Side length of the square output image (default 112)
+
+        Returns:
+            Aligned (or plain-resized) BGR face image of shape
+            (output_size, output_size, 3).
+        """
+        try:
+            if self.use_dlib and fr_lib is not None:
+                rgb = cv2.cvtColor(face_roi, cv2.COLOR_BGR2RGB)
+                h, w = rgb.shape[:2]
+                landmarks_list = fr_lib.face_landmarks(
+                    rgb, face_locations=[(0, w, h, 0)]
+                )
+                if landmarks_list:
+                    lm = landmarks_list[0]
+                    left_pts  = lm.get("left_eye",  [])
+                    right_pts = lm.get("right_eye", [])
+                    # Guard: np.mean([], axis=0) returns nan with size==1, which is
+                    # truthy and produces garbage alignment. Check the source lists.
+                    if left_pts and right_pts:
+                        left_eye  = np.mean(left_pts,  axis=0)
+                        right_eye = np.mean(right_pts, axis=0)
+                        # Canonical eye positions inside output_size square
+                        # (roughly 30 % from each side, 35 % from top)
+                        desired_left  = np.array([output_size * 0.30, output_size * 0.35])
+                        desired_right = np.array([output_size * 0.70, output_size * 0.35])
+
+                        dx = right_eye[0] - left_eye[0]
+                        dy = right_eye[1] - left_eye[1]
+                        angle  = np.degrees(np.arctan2(dy, dx))
+                        scale  = (np.linalg.norm(desired_right - desired_left)
+                                  / (np.linalg.norm(right_eye - left_eye) + 1e-6))
+                        center = tuple(((left_eye + right_eye) / 2).astype(int))
+
+                        M = cv2.getRotationMatrix2D(center, angle, scale)
+                        # Shift so the eye midpoint lands in the right spot
+                        M[0, 2] += (output_size / 2) - center[0]
+                        M[1, 2] += (output_size * 0.35) - center[1]
+
+                        aligned = cv2.warpAffine(
+                            face_roi, M, (output_size, output_size),
+                            flags=cv2.INTER_LINEAR,
+                            borderMode=cv2.BORDER_REPLICATE,
+                        )
+                        return aligned
+
+            # OpenCV Haar eye detector fallback
+            gray = cv2.cvtColor(face_roi, cv2.COLOR_BGR2GRAY)
+            eye_cascade = cv2.CascadeClassifier(
+                cv2.data.haarcascades + 'haarcascade_eye.xml'
+            )
+            eyes = eye_cascade.detectMultiScale(gray, 1.1, 5, minSize=(15, 15))
+
+            if len(eyes) >= 2:
+                # Sort left-to-right
+                eyes = sorted(eyes, key=lambda e: e[0])
+                lx, ly, lw, lh = eyes[0]
+                rx, ry, rw, rh = eyes[1]
+                left_eye  = np.array([lx + lw / 2, ly + lh / 2])
+                right_eye = np.array([rx + rw / 2, ry + rh / 2])
+
+                desired_left  = np.array([output_size * 0.30, output_size * 0.35])
+                desired_right = np.array([output_size * 0.70, output_size * 0.35])
+
+                dx = right_eye[0] - left_eye[0]
+                dy = right_eye[1] - left_eye[1]
+                angle  = np.degrees(np.arctan2(dy, dx))
+                scale  = (np.linalg.norm(desired_right - desired_left)
+                          / (np.linalg.norm(right_eye - left_eye) + 1e-6))
+                center = tuple(((left_eye + right_eye) / 2).astype(int))
+
+                M = cv2.getRotationMatrix2D(center, angle, scale)
+                M[0, 2] += (output_size / 2) - center[0]
+                M[1, 2] += (output_size * 0.35) - center[1]
+
+                aligned = cv2.warpAffine(
+                    face_roi, M, (output_size, output_size),
+                    flags=cv2.INTER_LINEAR,
+                    borderMode=cv2.BORDER_REPLICATE,
+                )
+                return aligned
+
+        except Exception as e:
+            logger.debug(f"Face alignment skipped: {e}")
+
+        # No landmarks / eye detection failed — plain resize as fallback
+        return cv2.resize(face_roi, (output_size, output_size))
+
+    # ── Encoding persistence ──────────────────────────────────────────────────
+
+    def save_encodings(self, path: str) -> bool:
+        """
+        Persist all registered face encodings to an encrypted file on disk.
+
+        The encodings are serialised as a compressed .npz in memory, then
+        encrypted with Fernet (AES-128-CBC) using the key from config.py
+        before being written to *path*.  A separate encrypted JSON sidecar
+        stores the person-name mapping.
+
+        Args:
+            path: File path to write, e.g. 'models/face_encodings.npz'
+
+        Returns:
+            True on success.
+        """
+        try:
+            Path(path).parent.mkdir(parents=True, exist_ok=True)
+            fernet = _get_fernet()
+
+            # Serialise arrays to an in-memory buffer, then encrypt
+            arrays = {}
+            meta   = {}
+            for person_id, encodings in self.known_faces.items():
+                key = f"enc_{person_id}"
+                arrays[key] = np.array(encodings, dtype=np.float32)
+                meta[person_id] = self.person_names.get(person_id, person_id)
+
+            buf = io.BytesIO()
+            np.savez_compressed(buf, **arrays)
+            encrypted_data = fernet.encrypt(buf.getvalue())
+
+            with open(path, 'wb') as f:
+                f.write(encrypted_data)
+
+            meta_path = str(path).replace('.npz', '_meta.json')
+            encrypted_meta = fernet.encrypt(json.dumps(meta).encode())
+            with open(meta_path, 'wb') as f:
+                f.write(encrypted_meta)
+
+            logger.info(f"Saved {len(self.known_faces)} person(s) to {path} (encrypted)")
+            return True
+        except Exception as e:
+            logger.error(f"Could not save encodings: {e}")
+            return False
+
+    def load_encodings(self, path: str) -> int:
+        """
+        Load face encodings previously saved with save_encodings().
+
+        Decrypts the file with Fernet, then loads the .npz arrays.
+        Merges loaded persons into the current known_faces dict.
+
+        Args:
+            path: Path to the encrypted file written by save_encodings()
+
+        Returns:
+            Number of persons loaded (0 on failure).
+        """
+        try:
+            enc_path  = Path(path)
+            meta_path = Path(str(path).replace('.npz', '_meta.json'))
+
+            if not enc_path.exists():
+                logger.warning(f"Encodings file not found: {path}")
+                return 0
+
+            fernet = _get_fernet()
+
+            with open(enc_path, 'rb') as f:
+                decrypted = fernet.decrypt(f.read())
+            data = np.load(io.BytesIO(decrypted))
+
+            meta: dict = {}
+            if meta_path.exists():
+                with open(meta_path, 'rb') as f:
+                    meta = json.loads(fernet.decrypt(f.read()).decode())
+
+            loaded = 0
+            for key in data.files:
+                person_id = key.replace('enc_', '', 1)
+                encodings = [data[key][i] for i in range(len(data[key]))]
+                self.known_faces[person_id]  = encodings
+                self.person_names[person_id] = meta.get(person_id, person_id)
+                loaded += 1
+
+            logger.info(f"Loaded {loaded} person(s) from {path} (decrypted)")
+            return loaded
+        except Exception as e:
+            logger.error(f"Could not load encodings: {e}")
+            return 0
+
     def _extract_face_features(self, face_roi: np.ndarray) -> Optional[np.ndarray]:
         """
         Extract feature vector from face image.
@@ -334,56 +624,54 @@ class FacialRecognitionEngine:
         try:
             if face_roi is None or face_roi.size == 0:
                 return None
-            
-            # Prefer face_recognition (dlib) - much better accuracy for live webcam
-            if USE_FACE_RECOGNITION_LIB and fr_lib is not None:
+
+            # CLAHE contrast normalization — dramatically improves low-light and
+            # uneven-lighting conditions before any encoding step.
+            face_roi = self._apply_clahe(face_roi)
+
+            # Align face to canonical pose before encoding
+            face_roi = self._align_face(face_roi)
+
+            # ── dlib ResNet encoder (only when use_dlib=True) ─────────────
+            if self.use_dlib and fr_lib is not None:
                 rgb = cv2.cvtColor(face_roi, cv2.COLOR_BGR2RGB)
                 h, w = rgb.shape[:2]
-                # Treat whole ROI as one face (top, right, bottom, left)
                 encodings = fr_lib.face_encodings(rgb, known_face_locations=[(0, w, h, 0)])
                 if encodings:
                     return encodings[0].astype(np.float32)
                 return None
-            
-            # OpenCV fallback
-            resized = cv2.resize(face_roi, (64, 64))
+
+            # ── OpenCV LBPH + gradient fallback ───────────────────────────
+            resized = cv2.resize(face_roi, (96, 96))
             gray = cv2.cvtColor(resized, cv2.COLOR_BGR2GRAY)
-            
-            # Apply histogram equalization for better contrast
             gray = cv2.equalizeHist(gray)
-            
-            # Compute gradient features (Sobel)
-            # This works reliably across OpenCV versions
+
+            # LBP (Local Binary Pattern) — encodes micro-texture around each pixel.
+            # Far more discriminative for faces than raw gradient histograms.
+            lbp = self._compute_lbp(gray)
+            hist_lbp, _ = np.histogram(lbp.ravel(), bins=64, range=(0, 256))
+            hist_lbp = hist_lbp.astype(np.float32)
+
+            # HOG-lite: oriented gradient magnitudes in an 8-bin histogram
             sobelx = cv2.Sobel(gray, cv2.CV_32F, 1, 0, ksize=3)
             sobely = cv2.Sobel(gray, cv2.CV_32F, 0, 1, ksize=3)
-            
-            # Compute magnitude and direction
             magnitude = np.sqrt(sobelx**2 + sobely**2)
             direction = np.arctan2(sobely, sobelx)
-            
-            # Create histogram of gradients (8 bins for direction)
             hist_edges = np.linspace(-np.pi, np.pi, 9)
-            hist_grad, _ = np.histogram(direction.flatten(), bins=hist_edges, weights=magnitude.flatten())
-            
-            # Also get color histogram for robustness
-            hist_gray = cv2.calcHist([gray], [0], None, [64], [0, 256]).flatten()
-            
-            # Combine both histograms
-            combined_features = np.concatenate([hist_grad, hist_gray])
-            
-            # Ensure exactly 128-dimensional output
-            if len(combined_features) > 128:
-                combined_features = combined_features[:128]
-            elif len(combined_features) < 128:
-                padding = np.zeros(128 - len(combined_features))
-                combined_features = np.concatenate([combined_features, padding])
-            
-            # Normalize vector to unit length for better distance comparison
-            norm = np.linalg.norm(combined_features)
+            hist_grad, _ = np.histogram(direction.ravel(), bins=hist_edges,
+                                        weights=magnitude.ravel())
+            hist_grad = hist_grad.astype(np.float32)
+
+            # Spatial intensity histogram (captures overall brightness distribution)
+            hist_gray = cv2.calcHist([gray], [0], None, [56], [0, 256]).flatten()
+
+            combined = np.concatenate([hist_lbp, hist_grad, hist_gray])   # 64+8+56 = 128
+
+            norm = np.linalg.norm(combined)
             if norm > 0:
-                combined_features = combined_features / norm
-            
-            return combined_features.astype(np.float32)
+                combined = combined / norm
+
+            return combined.astype(np.float32)
         except Exception as e:
             logger.error(f"Error extracting face features: {e}")
             return None

@@ -4,10 +4,13 @@ Flask API Routes for Door Face Panels Smart Security System
 import base64
 import logging
 from datetime import datetime, timezone
+from pathlib import Path
 
 import cv2
 import numpy as np
-from flask import Blueprint, request, jsonify, current_app
+import io
+import csv
+from flask import Blueprint, request, jsonify, current_app, Response
 
 logger = logging.getLogger(__name__)
 
@@ -333,15 +336,42 @@ def get_users():
 
 @api_bp.route("/users/<user_id>", methods=["DELETE"])
 def delete_user(user_id):
-    """Remove a registered user (DB + face engine)."""
+    """PIPEDA right-to-erasure: remove a user's DB records, face encodings,
+    and on-disk sample photos so no biometric data remains."""
     try:
         if not user_id:
             return jsonify({"error": "user_id required"}), 400
+
         db = get_db()
+        engine = current_app.face_engine
+
         if not db.delete_user(user_id):
             return jsonify({"error": "User not found or cannot be deleted"}), 404
-        current_app.face_engine.remove_face(user_id)
-        return jsonify({"status": "deleted", "user_id": user_id}), 200
+
+        engine.remove_face(user_id)
+
+        # Delete on-disk sample photos for this person
+        import shutil
+        samples_dir = Path("data/samples")
+        deleted_photos = False
+        if samples_dir.exists():
+            for d in samples_dir.iterdir():
+                if d.is_dir() and d.name == user_id:
+                    shutil.rmtree(d)
+                    deleted_photos = True
+                    logger.info("Deleted sample photos: %s", d)
+
+        # Rebuild encrypted encodings file without this person
+        from api import ENCODINGS_FILE
+        engine.save_encodings(ENCODINGS_FILE)
+
+        # Audit trail for the deletion itself
+        db.log_audit("USER_DELETED", user_id=user_id,
+                     resource="users", result="success",
+                     details=f"All data erased (photos={'yes' if deleted_photos else 'no'})")
+
+        return jsonify({"status": "deleted", "user_id": user_id,
+                        "photos_removed": deleted_photos}), 200
     except Exception as e:
         logger.exception("Error deleting user")
         return jsonify({"error": str(e)}), 500
@@ -464,6 +494,8 @@ def get_audit_log():
         limit = request.args.get('limit', 100, type=int)
         offset = request.args.get('offset', 0, type=int)
         
+        fmt = request.args.get('format', 'json').lower()
+
         # Query audit log database; map user_id -> user for frontend
         raw = get_db().get_audit_logs(limit=limit, offset=offset)
         audit_log = []
@@ -473,6 +505,20 @@ def get_audit_log():
             if isinstance(ts, str) and "Z" not in ts and "+" not in ts:
                 entry["timestamp"] = ts.replace(" ", "T", 1).strip() + "Z"
             audit_log.append(entry)
+
+        if fmt == "csv":
+            columns = ["timestamp", "action", "user", "resource", "result", "details"]
+            buf = io.StringIO()
+            writer = csv.DictWriter(buf, fieldnames=columns, extrasaction="ignore")
+            writer.writeheader()
+            for entry in audit_log:
+                writer.writerow(entry)
+            return Response(
+                buf.getvalue(),
+                mimetype="text/csv",
+                headers={"Content-Disposition": "attachment; filename=audit-log.csv"},
+            )
+
         return jsonify({
             "audit_log": audit_log,
             "count": len(audit_log),

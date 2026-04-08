@@ -7,7 +7,9 @@ from datetime import datetime, timezone
 
 import cv2
 import numpy as np
-from flask import Blueprint, request, jsonify, current_app
+import io
+import csv
+from flask import Blueprint, request, jsonify, current_app, Response
 
 logger = logging.getLogger(__name__)
 
@@ -464,6 +466,8 @@ def get_audit_log():
         limit = request.args.get('limit', 100, type=int)
         offset = request.args.get('offset', 0, type=int)
         
+        fmt = request.args.get('format', 'json').lower()
+
         # Query audit log database; map user_id -> user for frontend
         raw = get_db().get_audit_logs(limit=limit, offset=offset)
         audit_log = []
@@ -473,6 +477,20 @@ def get_audit_log():
             if isinstance(ts, str) and "Z" not in ts and "+" not in ts:
                 entry["timestamp"] = ts.replace(" ", "T", 1).strip() + "Z"
             audit_log.append(entry)
+
+        if fmt == "csv":
+            columns = ["timestamp", "action", "user", "resource", "result", "details"]
+            buf = io.StringIO()
+            writer = csv.DictWriter(buf, fieldnames=columns, extrasaction="ignore")
+            writer.writeheader()
+            for entry in audit_log:
+                writer.writerow(entry)
+            return Response(
+                buf.getvalue(),
+                mimetype="text/csv",
+                headers={"Content-Disposition": "attachment; filename=audit-log.csv"},
+            )
+
         return jsonify({
             "audit_log": audit_log,
             "count": len(audit_log),

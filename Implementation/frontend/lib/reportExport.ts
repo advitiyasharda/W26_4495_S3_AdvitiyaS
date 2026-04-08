@@ -1,4 +1,4 @@
-import type { AccessLog, FallEvent, ObjectDetectionEvent, Threat } from "./api";
+import type { AccessLog, FallEvent, ObjectDetectionEvent, ObjectCategory, ObjectSeverity, Threat } from "./api";
 import type { TimeRangeId } from "./timeRange";
 import { rangeLabelForExport } from "./timeRange";
 
@@ -135,22 +135,61 @@ export function downloadJson(filename: string, data: unknown) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadCsv(filename: string, rows: Record<string, string | number | null>[]) {
-  if (rows.length === 0) return;
+function csvEscape(v: string | number | null) {
+  const s = v === null || v === undefined ? "" : String(v);
+  if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
+  return s;
+}
+
+function rowsToCsvLines(rows: Record<string, string | number | null>[]): string[] {
+  if (rows.length === 0) return [];
   const headers = Object.keys(rows[0]);
-  const esc = (v: string | number | null) => {
-    const s = v === null || v === undefined ? "" : String(v);
-    if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
-    return s;
-  };
-  const lines = [headers.join(","), ...rows.map((r) => headers.map((h) => esc(r[h] as string | number | null)).join(","))];
-  const blob = new Blob([lines.join("\n")], { type: "text/csv;charset=utf-8" });
+  return [headers.join(","), ...rows.map((r) => headers.map((h) => csvEscape(r[h] as string | number | null)).join(","))];
+}
+
+function triggerDownload(filename: string, content: string) {
+  const blob = new Blob([content], { type: "text/csv;charset=utf-8" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
   a.href = url;
   a.download = filename;
   a.click();
   URL.revokeObjectURL(url);
+}
+
+export function downloadCsv(filename: string, rows: Record<string, string | number | null>[]) {
+  if (rows.length === 0) return false;
+  triggerDownload(filename, rowsToCsvLines(rows).join("\n"));
+  return true;
+}
+
+export function downloadUnifiedCsv(
+  filename: string,
+  opts: {
+    logs: AccessLog[];
+    falls: FallEvent[];
+    threats: Threat[];
+    objects: ObjectDetectionEvent[];
+  }
+): boolean {
+  const sections: string[] = [];
+
+  if (opts.logs.length > 0) {
+    sections.push("# ACCESS LOGS", ...rowsToCsvLines(logsToCsvRows(opts.logs)));
+  }
+  if (opts.falls.length > 0) {
+    sections.push("", "# FALL EVENTS", ...rowsToCsvLines(fallsToCsvRows(opts.falls)));
+  }
+  if (opts.threats.length > 0) {
+    sections.push("", "# ALERTS / THREATS", ...rowsToCsvLines(threatsToCsvRows(opts.threats)));
+  }
+  if (opts.objects.length > 0) {
+    sections.push("", "# OBJECT DETECTIONS", ...rowsToCsvLines(objectsToCsvRows(opts.objects)));
+  }
+
+  if (sections.length === 0) return false;
+  triggerDownload(filename, sections.join("\n"));
+  return true;
 }
 
 export function logsToCsvRows(logs: AccessLog[]) {
@@ -161,5 +200,46 @@ export function logsToCsvRows(logs: AccessLog[]) {
     name: l.name ?? "",
     person_id: l.person_id ?? "",
     confidence: l.confidence,
+  }));
+}
+
+export function fallsToCsvRows(falls: FallEvent[]) {
+  return falls.map((f) => ({
+    timestamp: f.timestamp,
+    anomaly_id: f.anomaly_id,
+    confidence: f.anomaly_score,
+    description: f.description,
+    user_id: f.user_id ?? "",
+  }));
+}
+
+export function threatsToCsvRows(threats: Threat[]) {
+  return threats.map((t) => ({
+    timestamp: t.timestamp,
+    threat_type: t.threat_type,
+    severity: t.severity,
+    message: t.message,
+  }));
+}
+
+export function auditToCsvRows(entries: Array<{ action: string; user: string | null; resource: string | null; result: string; timestamp: string }>) {
+  return entries.map((e) => ({
+    timestamp: e.timestamp,
+    action: e.action,
+    user: e.user ?? "",
+    resource: e.resource ?? "",
+    result: e.result,
+  }));
+}
+
+export function objectsToCsvRows(events: ObjectDetectionEvent[]) {
+  return events.map((e) => ({
+    timestamp: e.timestamp,
+    object_class: e.object_class,
+    category: e.category,
+    severity: e.severity,
+    confidence: e.confidence,
+    unattended_seconds: e.unattended_seconds,
+    frame_count: e.frame_count,
   }));
 }

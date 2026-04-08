@@ -5,7 +5,8 @@ import { getFallEvents, getFallStatus, resetFallDetector, FallEvent, FallStatusR
 import { DEMO_FALL_EVENTS, DEMO_FALL_STATUS } from "@/lib/demoData";
 import { demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoMode";
 import PageHero from "@/components/PageHero";
-import { IconCalmCheck, IconCameraDoor, IconFallMotion } from "@/components/icons/DoorIcons";
+import { IconCalmCheck, IconCameraDoor, IconDownload, IconFallMotion } from "@/components/icons/DoorIcons";
+import { downloadCsv, fallsToCsvRows } from "@/lib/reportExport";
 import { fallConfidenceHistogram, fallsPerDay } from "@/lib/chartPrep";
 import { chart as C } from "@/lib/theme";
 import {
@@ -114,6 +115,17 @@ export default function FallsPage() {
               <IconCameraDoor className="w-4 h-4 opacity-80" />
               {status?.detector_ready ? "Stream OK" : "Offline"}
             </span>
+            <button
+              type="button"
+              onClick={() => downloadCsv(`fall-events-${new Date().toISOString().slice(0, 10)}.csv`, fallsToCsvRows(events))}
+              disabled={events.length === 0}
+              className="bg-white text-pink-700 text-sm font-semibold px-4 py-2 rounded-xl border border-pink-200/80 hover:bg-pink-50/90 transition-colors shadow-sm disabled:opacity-40 disabled:cursor-not-allowed"
+            >
+              <span className="inline-flex items-center gap-2">
+                <IconDownload className="w-4 h-4" />
+                Export CSV
+              </span>
+            </button>
             <button
               type="button"
               onClick={() => setShowResetConfirm(true)}

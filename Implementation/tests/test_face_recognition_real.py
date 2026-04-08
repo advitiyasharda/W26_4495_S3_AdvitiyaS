@@ -141,8 +141,17 @@ def _load_encodings(engine: FacialRecognitionEngine, db: Database) -> dict:
 
 # ── Tests ─────────────────────────────────────────────────────────────────────
 
+ENCODINGS_FILE = str(SAMPLE_DIR.parent.parent / "models" / "face_encodings.npz")
+
+# How often to run the (expensive) face detection.  On frames in between,
+# we reuse the previous bounding boxes and only re-run the (cheap) encoding.
+DETECT_EVERY_N = 3
+# Scale factor for the detection frame (0.5 = half resolution → ~4× faster).
+DETECT_SCALE = 0.5
+
+
 def test_recognition_with_webcam():
-    """Live webcam test — draws recognition result on each frame."""
+    """Live webcam test — smooth 25+ FPS with skip-frame detection."""
     print("\n" + "=" * 70)
     print("FACE RECOGNITION TEST — LIVE WEBCAM")
     print("=" * 70)
@@ -150,24 +159,40 @@ def test_recognition_with_webcam():
     engine = FacialRecognitionEngine()
     db     = Database()
 
-    print("\nLoading registered people from data/samples/...")
-    loaded = _load_encodings(engine, db)
+    # Fast path: load pre-saved encodings, fall back to photo processing
+    n = engine.load_encodings(ENCODINGS_FILE)
+    if n > 0:
+        # Build the loaded dict from engine's own data for summary display
+        loaded = {pid: engine.person_names.get(pid, pid)
+                  for pid in engine.known_faces}
+        print(f"\n[OK] Loaded {n} person(s) from saved encodings (instant)")
+    else:
+        print("\nNo saved encodings — loading from photos (slower first time)...")
+        loaded = _load_encodings(engine, db)
 
     if not loaded:
-        print("\n[ERROR] No faces loaded. Cannot run webcam test.")
+        print("\n[ERROR] No faces loaded. Run:  python scripts/register_faces.py --all")
         return
 
-    print(f"\n[OK] {len(loaded)} person(s) loaded: {', '.join(loaded.values())}")
+    print(f"[OK] {len(loaded)} person(s) ready: {', '.join(loaded.values())}")
 
     cap = cv2.VideoCapture(0)
     if not cap.isOpened():
         print("\n[ERROR] Webcam not found.")
         return
 
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
+
     print("\nWebcam open. Press Q or ESC to quit (click the window first).\n")
 
-    frame_count  = 0
+    import time
+    frame_count   = 0
     granted_count = 0
+    cached_faces  = []       # reused between detection frames
+    cached_labels = []
+    fps_time      = time.time()
+    fps_display   = 0.0
 
     while True:
         ret, frame = cap.read()
@@ -175,27 +200,42 @@ def test_recognition_with_webcam():
             break
 
         frame_count += 1
-        faces = engine.detect_faces(frame)
+        fh, fw = frame.shape[:2]
 
-        for face_coords in faces:
-            x, y, w, h = (int(v) for v in face_coords)
-            result = engine.recognize_face(frame, (x, y, w, h))
+        # Only run detection every Nth frame on a downscaled copy
+        if frame_count % DETECT_EVERY_N == 1 or not cached_faces:
+            small = cv2.resize(frame, (0, 0), fx=DETECT_SCALE, fy=DETECT_SCALE)
+            raw_faces = engine.detect_faces(small)
+            inv = 1.0 / DETECT_SCALE
+            cached_faces = [(int(x * inv), int(y * inv),
+                             int(w * inv), int(h * inv))
+                            for (x, y, w, h) in raw_faces]
 
-            if result and result.get("person_id"):
-                color = (0, 255, 0)
-                label = f"{result['name']} ({result['confidence']:.2f})"
-                granted_count += 1
-            else:
-                color = (0, 0, 255)
-                conf  = result.get("confidence", 0.0) if result else 0.0
-                label = f"Unknown ({conf:.2f})"
+            cached_labels = []
+            for (x, y, w, h) in cached_faces:
+                result = engine.recognize_face(frame, (x, y, w, h))
+                if result and result.get("person_id"):
+                    cached_labels.append(((0, 220, 0),
+                                          f"{result['name']} ({result['confidence']:.2f})"))
+                    granted_count += 1
+                else:
+                    conf = result.get("confidence", 0.0) if result else 0.0
+                    cached_labels.append(((0, 0, 220),
+                                          f"Unknown ({conf:.2f})"))
 
+        # Draw cached results every frame (cheap)
+        for (x, y, w, h), (color, label) in zip(cached_faces, cached_labels):
             cv2.rectangle(frame, (x, y), (x+w, y+h), color, 2)
             cv2.putText(frame, label, (x, y - 10),
                         cv2.FONT_HERSHEY_SIMPLEX, 0.6, color, 2)
 
-        fh, fw = frame.shape[:2]
-        cv2.putText(frame, f"Frames: {frame_count}  Granted: {granted_count}",
+        # FPS counter (smoothed over 10 frames)
+        if frame_count % 10 == 0:
+            now = time.time()
+            fps_display = 10.0 / max(now - fps_time, 0.001)
+            fps_time = now
+
+        cv2.putText(frame, f"FPS: {fps_display:.0f}  Granted: {granted_count}",
                     (10, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2)
         cv2.putText(frame, f"Registered: {len(loaded)}  |  Q / ESC to quit",
                     (10, fh - 12), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (180, 180, 180), 1)
@@ -231,8 +271,15 @@ def test_recognition_with_photos():
     engine = FacialRecognitionEngine()
     db     = Database()
 
-    print("\nLoading registered people from data/samples/...")
-    loaded = _load_encodings(engine, db)
+    # Fast path first
+    n = engine.load_encodings(ENCODINGS_FILE)
+    if n > 0:
+        loaded = {pid: engine.person_names.get(pid, pid)
+                  for pid in engine.known_faces}
+        print(f"\n[OK] Loaded {n} person(s) from saved encodings")
+    else:
+        print("\nNo saved encodings — loading from photos...")
+        loaded = _load_encodings(engine, db)
 
     if not loaded:
         print("\n[ERROR] No faces loaded. Cannot run photo test.")

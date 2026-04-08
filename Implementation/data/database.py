@@ -14,15 +14,19 @@ logger = logging.getLogger(__name__)
 class Database:
     """SQLite database manager for Door Face Panels system"""
     
-    def __init__(self, db_path: str = 'data/doorface.db'):
+    # Resolve to an absolute path so the DB always lands in Implementation/data/
+    # regardless of which working directory a script is launched from.
+    _DEFAULT_DB = str(Path(__file__).resolve().parent / 'doorface.db')
+
+    def __init__(self, db_path: str = None):
         """
         Initialize database connection.
         
         Args:
-            db_path: Path to SQLite database file
+            db_path: Path to SQLite database file (defaults to data/doorface.db)
         """
-        self.db_path = db_path
-        Path(db_path).parent.mkdir(parents=True, exist_ok=True)
+        self.db_path = db_path or self._DEFAULT_DB
+        Path(self.db_path).parent.mkdir(parents=True, exist_ok=True)
         self.conn = None
         self.init_db()
     

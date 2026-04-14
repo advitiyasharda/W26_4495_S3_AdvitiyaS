@@ -1,362 +1,228 @@
 # FaceDoor — Smart Door Security System
 
-**Douglas College CSIS 4495 — Applied Research Project (Section 003)**  
-Team: Advitiya Sharda, Eric Sanjo, Reubin Chatta  
-Industry Partner: Door Face Panels — Armin Ghauforian
+**Douglas College — CSIS 4495 Applied Research (Section 003)**  
+**Team:** Advitiya Sharda, Eric Sanjo, Reubin Chatta  
+**Industry partner:** Door Face Panels — Armin Ghauforian
 
 ---
 
-## What This Project Does
+## For instructors and markers
 
-FaceDoor is a smart door security system designed for elderly care facilities. A camera at the door recognises residents and staff by face, logs every entry and exit event, and shows caregivers everything on a live web dashboard. When an unknown person appears or something unusual happens, the system generates a security alert.
+| What | Where |
+|------|--------|
+| **Runnable application** | `Implementation/` — Flask API, Next.js dashboard, ML models, scripts, and automated tests |
+| **Slides, progress reports, and written docs** | `ReportsAndDocuments/` — PDFs and supporting markdown (per course check-in expectations) |
+| **Extended technical README** | `Implementation/README.md` — architecture diagram, full endpoint list, script catalogue |
+| **Compliance write-up** | `Implementation/docs/COMPLIANCE.md` |
+| **Ongoing work history** | Git `main` branch history and merged pull requests (see **Team contributions** below). Progress reports are under `ReportsAndDocuments/`. |
 
-Phase 2 adds real-time **fall detection** using a trained LSTM model on top of the door security system, monitored through a dedicated dashboard page.
+**Quick verify (from repo root):**
 
-The project has three main parts that run together:
-
-- **Backend (Flask + Python)** — handles face recognition, fall detection, stores all events in a local SQLite database, and exposes a REST API
-- **Frontend (Next.js)** — a caregiver dashboard that reads from the API and refreshes automatically every 30 seconds
-- **Camera script** — a standalone process that feeds frames into the fall detector and posts results to the backend API
-
-Everything runs locally. No data is sent to the cloud.
-
----
-
-## What the Dashboard Shows
-
-| Page | URL | What you see |
-|---|---|---|
-| Dashboard | `http://localhost:3000/` | KPI cards (total entries, denials, active alerts, falls today), hourly bar chart, access outcome donut chart, recent access log |
-| Alerts | `http://localhost:3000/alerts` | Security alert cards, filterable by severity (High / Critical) — includes fall alerts |
-| Access Logs | `http://localhost:3000/logs` | Full paginated access log with entry/exit and status badges; registered people list |
-| Audit Trail | `http://localhost:3000/compliance` | System audit log for compliance; CSV export |
-| Falls | `http://localhost:3000/falls` | Live fall detection page — LSTM confidence bar, detector status, event history, reset button |
-
-If no one has been registered yet, the dashboard shows realistic demo data with a visible "Demo data" label so the UI is always presentable.
-
----
-
-## System Requirements
-
-| Tool | Version | Where to get it |
-|---|---|---|
-| Python | **3.11** | https://www.python.org/downloads |
-| Node.js | 18 LTS or newer | https://nodejs.org/en/download |
-| npm | comes with Node.js | — |
-| Webcam | any USB or built-in | required for face capture and fall detection |
-
-A webcam is only needed if you want to register real faces or run the live detection scripts. The dashboard and API work without one.
-
-> **Windows note:** Installing `face_recognition` (dlib) on Windows requires Visual Studio Build Tools. Run `pip install cmake` before `pip install face_recognition`.
-
----
-
-## Installation
-
-Clone the repository if you have not already:
-
-```bash
-git clone https://github.com/advitiyasharda/W26_4495_S3_AdvitiyaS.git
-cd W26_4495_S3_AdvitiyaS
+```powershell
+cd Implementation
+pip install -r requirements.txt
+# Terminal 1
+$env:FLASK_PORT=5001; python main.py
+# Terminal 2
+cd frontend; npm install; npm run dev
 ```
 
-### Step 1 — Install Python dependencies
+Open **http://localhost:3000**. The frontend proxies `/api/*` to the Flask port (default **5001**).
 
-Run this from inside the `Implementation/` folder:
+---
 
-```bash
+## What this project does
+
+FaceDoor is a smart door security system for elderly care: a camera identifies people at the door, logs access, raises **threat** alerts (failed attempts, unusual hours, tailgating, and more), supports **behavioural anomaly** scoring (Isolation Forest), **fall detection** (rules-based and LSTM on pose sequences), and **object / weapon-aware** monitoring (YOLO). A **Next.js** dashboard presents KPIs, alerts, falls, access logs, compliance audit export, and object analytics. **All processing is local** (no cloud upload of video or face biometrics in the default design).
+
+---
+
+## Repository layout
+
+```text
+W26_4495_S3_AdvitiyaS/
+├── README.md                 ← This file (course + team + how to run)
+├── Implementation/          ← Application source, tests, and Implementation/README.md
+├── ReportsAndDocuments/     ← Slides, progress reports, duplicated docs for submission
+└── …
+```
+
+All commands in this README assume you start from the **repository root**, then `cd Implementation` unless noted otherwise.
+
+---
+
+## System requirements
+
+| Tool | Notes |
+|------|--------|
+| Python **3.11+** | Used by Flask, OpenCV, MediaPipe, scikit-learn, optional `face_recognition` |
+| Node.js **18+** | For `Implementation/frontend` |
+| Webcam | Optional: face capture, live fall script, live object tests |
+
+**Windows:** building `dlib` / `face_recognition` may require **Visual Studio Build Tools**. If install fails: `pip install cmake` then `pip install dlib` then `pip install face_recognition`.
+
+---
+
+## Installation (first time)
+
+```powershell
+git clone https://github.com/advitiyasharda/W26_4495_S3_AdvitiyaS.git
+cd W26_4495_S3_AdvitiyaS\Implementation
 pip install -r requirements.txt
 ```
 
-On Windows, use PowerShell (not Git Bash) for best results. If `face_recognition` fails to install, run these first:
+**MediaPipe pose model (fall detection):** one-time download — see `Implementation/README.md` for the exact `curl` command into `Implementation/models/pose_landmarker.task`.
 
 ```powershell
-pip install cmake
-pip install dlib
-pip install face_recognition
-```
-
-### Step 2 — Install frontend dependencies
-
-This only needs to be done once:
-
-```bash
 cd frontend
 npm install
-cd ..
 ```
 
 ---
 
-## Running the Project
+## Running the project
 
-### Standard mode (face recognition + dashboard)
+Use **two terminals** for dashboard + API.
 
-You need **two terminals open at the same time**.
+**Terminal 1 — backend (from `Implementation/`):**
 
-**Terminal 1 — Backend:**
-
-```bash
-# Mac / Linux
-FLASK_PORT=5001 python3 main.py
-
-# Windows PowerShell
-$env:FLASK_PORT=5001; python main.py
+```powershell
+cd W26_4495_S3_AdvitiyaS\Implementation
+$env:FLASK_PORT=5001
+python main.py
 ```
 
-**Terminal 2 — Frontend:**
+**Terminal 2 — frontend:**
 
-```bash
-cd frontend
+```powershell
+cd W26_4495_S3_AdvitiyaS\Implementation\frontend
 npm run dev
 ```
 
-Open `http://localhost:3000` in a browser. If the backend is running, the dashboard shows live data. If not, it shows demo data automatically.
+Browser: **http://localhost:3000**
 
-### Phase 2 mode (face recognition + fall detection + dashboard)
+**Optional third process — live fall camera** (from `Implementation/`):
 
-You need **three terminals**.
-
-**Terminal 1 — Backend:**
-
-```bash
-$env:FLASK_PORT=5001; python main.py
-```
-
-**Terminal 2 — Fall detection camera (LSTM model):**
-
-```bash
-cd Implementation
+```powershell
+python scripts/fall_detection_camera.py
+# or LSTM mode:
 python scripts/fall_detection_camera.py --lstm
 ```
 
-**Terminal 3 — Frontend:**
+---
 
-```bash
-cd Implementation/frontend
-npm run dev
-```
+## Dashboard routes
 
-Open `http://localhost:3000/falls` to see live LSTM confidence scores updating in real time.
+| Page | URL |
+|------|-----|
+| Dashboard | http://localhost:3000/ |
+| Alerts | http://localhost:3000/alerts |
+| Access logs | http://localhost:3000/logs |
+| Falls | http://localhost:3000/falls |
+| Compliance / audit | http://localhost:3000/compliance |
+| Objects | http://localhost:3000/objects |
+
+If the database is empty, the UI can show labelled **demo** data (see `Implementation/frontend/lib/demoMode.ts` and env vars documented in `Implementation/README.md`).
 
 ---
 
-## Registering Faces (to use real recognition)
+## Registering faces (real recognition)
 
-```bash
-# Step 1: capture photos from your webcam
-python3 scripts/capture_faces.py
-
-# Step 2: load those photos into the database
-python3 scripts/register_faces.py
-```
-
-You will be prompted to enter a name. The system takes several photos, extracts facial features, and saves them under `data/samples/<name>/`. Once registered, that person will be recognised when their face appears in a frame sent to `/api/recognize`.
-
-### Calibrating recognition accuracy
-
-After registering faces, run the calibration tool to find the optimal matching threshold for your specific sample photos:
-
-```bash
-python3 scripts/calibrate_recognition.py
-```
-
-This tests 11 threshold values between 0.30 and 0.80, prints a precision/recall/F1 table, and writes the best value back to `config.py` automatically. Run it with `--dry-run` to see results without changing any files.
-
----
-
-## Face Recognition Engine
-
-The system uses **two recognition backends** and automatically picks the best one available:
-
-| Backend | How to enable | Accuracy |
-|---|---|---|
-| **dlib** (via `face_recognition`) | Install `face_recognition` — switches on automatically | ~89–95% |
-| **OpenCV HOG** (fallback) | Used if `face_recognition` is not installed | ~70–80% |
-
-To check which engine is active and see the current threshold, call the status endpoint after starting the backend:
-
-```
-GET http://localhost:5001/api/recognition/status
-```
-
-Returns engine mode, registered persons count, active threshold, and dlib version.
-
----
-
-## Fall Detection
-
-### Phase 1 — Rules-based (available now)
-
-Three rules applied per frame: hip height, torso angle, and hip drop velocity. Each produces a score weighted into a combined confidence value. A fall is flagged when confidence ≥ 0.55.
-
-```bash
-python3 scripts/fall_detection_camera.py
-```
-
-### Phase 2 — LSTM model (requires `--lstm` flag)
-
-An LSTM trained on the UR Fall Detection Dataset classifies sequences of 33 MediaPipe body landmarks over N frames as fall or no-fall.
-
-```bash
-python3 scripts/fall_detection_camera.py --lstm
-```
-
-The `--lstm` flag loads `models/fall_lstm.keras` and the associated scaler. Falls detected by either method are logged to the database and escalate as **CRITICAL** security alerts visible on the alerts dashboard.
-
-Press `q` to quit the camera window. Detections are automatically posted to `/api/fall/log`.
-
----
-
-## LSTM Model
-
-| Property | Value |
-|---|---|
-| Architecture | LSTM (2 layers) |
-| Input | Sequence of MediaPipe pose keypoints (33 landmarks × 4 values) |
-| Training dataset | UR Fall Detection Dataset (URFD) |
-| Test accuracy | **93%** |
-| Model file | `models/fall_lstm.keras` |
-| Scaler file | `models/fall_lstm_scaler.pkl` |
-
-The keypoint extraction pipeline (`scripts/extract_keypoints.py`) uses the MediaPipe Tasks API to process URFD video frames into CSV sequences for training. The model was trained using `scripts/train_lstm.py`.
-
----
-
-## Threat Detection Rules
-
-The system monitors for the following patterns and raises alerts automatically:
-
-| Rule | Severity | Trigger |
-|---|---|---|
-| Unrecognised face | HIGH | Face detected but no database match |
-| Repeated failed access | HIGH | 3+ failed attempts in 10 minutes |
-| Unusual access time | MEDIUM | Entry between 10 PM and 5 AM |
-| Tailgating | HIGH | 2+ different people entering within 15 seconds |
-| Wandering | HIGH | Known resident exits between 9 PM and 6 AM |
-| Fall detected | CRITICAL | Single confirmed fall event |
-| Repeated falls (warning) | HIGH | 2 falls in the past 24 hours |
-| Repeated falls (critical) | CRITICAL | 3+ falls in the past 24 hours |
-
----
-
-## Port Configuration
-
-The backend runs on port **5001** (not Flask's default 5000) to avoid conflicts. The frontend proxies all API calls to port 5001 via `frontend/next.config.ts`.
-
-To change the port, update both:
+From `Implementation/`:
 
 ```powershell
-$env:FLASK_PORT=5002; python main.py
+python scripts/capture_faces.py
+python scripts/register_faces.py
 ```
 
-```ts
-// frontend/next.config.ts
-destination: 'http://localhost:5002/api/:path*',
-```
+Optional threshold tuning:
 
----
-
-## Project Structure
-
-```
-project-root/
-|
-|-- main.py                        # Entry point — starts the Flask API
-|-- config.py                      # Configuration values (thresholds, paths)
-|-- requirements.txt               # Python package list
-|
-|-- api/
-|   |-- __init__.py                # Flask app factory, loads face encodings at startup
-|   |-- routes.py                  # All REST API route handlers (includes /recognition/status)
-|   |-- facial_recognition.py      # Face detection and matching engine (dlib + OpenCV fallback)
-|   |-- fall_detection_routes.py   # Fall detection REST endpoints (/detect, /status, /events, /log)
-|   `-- threat_detection.py        # Rules-based threat detection (6 rules + repeated-falls)
-|
-|-- data/
-|   |-- database.py                # All SQLite read/write operations
-|   |-- data_generator.py          # Synthetic data generation (for ML training)
-|   |-- doorface.db                # SQLite database file (created automatically)
-|   `-- samples/                   # Face photo storage
-|       `-- {person_name}/
-|           `-- *.jpg / *.png
-|
-|-- models/
-|   |-- anomaly_detection.py       # Isolation Forest model wrapper
-|   |-- fall_detection.py          # FallDetector class — rules-based (Phase 1) + LSTM (Phase 2)
-|   |-- isolation_forest.pkl       # Trained anomaly model (generated by training script)
-|   |-- fall_lstm.keras            # Trained LSTM fall detection model (93% accuracy)
-|   |-- fall_lstm_scaler.pkl       # Feature scaler for LSTM input normalisation
-|   `-- pose_landmarker.task       # MediaPipe pose model (downloaded separately)
-|
-|-- frontend/                      # Next.js web application
-|   |-- app/
-|   |   |-- page.tsx               # Main dashboard page (includes falls-today stat card)
-|   |   |-- alerts/page.tsx        # Alerts page
-|   |   |-- logs/page.tsx          # Access logs page
-|   |   |-- compliance/page.tsx    # Audit trail page
-|   |   `-- falls/page.tsx         # Fall monitoring page (LSTM confidence bar, event table)
-|   |-- components/
-|   |   |-- Sidebar.tsx            # Navigation (includes Falls link)
-|   |   |-- StatCard.tsx
-|   |   |-- AccessChart.tsx
-|   |   |-- StatusDonut.tsx
-|   |   |-- AccessLogsTable.tsx
-|   |   |-- AlertList.tsx
-|   |   |-- AuditTable.tsx
-|   |   `-- StatusBadge.tsx
-|   |-- lib/
-|   |   |-- api.ts                 # Typed API client (includes fall detection types)
-|   |   `-- demoData.ts            # Fallback demo data when DB is empty
-|   |-- next.config.ts             # API proxy configuration (port 5001)
-|   `-- package.json
-|
-|-- scripts/
-|   |-- capture_faces.py           # Capture face photos from webcam
-|   |-- register_faces.py          # Load photos into the recognition engine and DB
-|   |-- calibrate_recognition.py   # Threshold calibration tool — finds optimal value, updates config.py
-|   |-- clear_database.py          # Wipe the database without deleting sample photos
-|   |-- diagnose_recognition.py    # Diagnostic tool — checks camera, samples, DB, recognition
-|   |-- quick_test_recognition.py  # Quick photo-based recognition test
-|   |-- extract_keypoints.py       # Extract MediaPipe keypoints from URFD dataset videos
-|   |-- train_lstm.py              # Train LSTM fall detection model on extracted keypoints
-|   |-- fall_detection_camera.py   # Live webcam fall detection (--lstm flag for LSTM mode)
-|   `-- train_anomaly_detection.py # Train the Isolation Forest model on synthetic data
-|
-|-- tests/
-|   |-- test_api_recognize.py         # API-level recognition test using live webcam
-|   |-- test_face_recognition_real.py # Extended webcam test with per-frame statistics
-|   |-- test_facial_recognition.py    # Unit tests for the recognition engine (CI-safe, no webcam)
-|   |-- test_threat_detection.py      # Unit tests for all threat detection rules
-|   `-- test_integration.py           # End-to-end pipeline test (auto-runs, no prompt)
-|
-`-- dashboard/                     # Original HTML/CSS prototype (kept for reference)
+```powershell
+python scripts/calibrate_recognition.py
 ```
 
 ---
 
-## Running the Tests
+## Evaluation and tests
 
-```bash
-# Full integration test (no prompts — runs automatically)
+Run from **`Implementation/`** (all paths below are relative to that folder):
+
+```powershell
+cd Implementation   # from repository root
+
+# End-to-end integration + benchmark (no prompts)
 python tests/test_integration.py
 
-# Recognition engine unit tests (no webcam required)
+# Unit tests (stdlib unittest)
+python -m unittest tests.test_threat_detection
+python -m unittest tests.test_fall_detection
+
+# Optional: recognition script tests / webcam (see file docstrings)
 python tests/test_facial_recognition.py
+python scripts/system_health_check.py
+```
 
-# Webcam-based recognition test
-python tests/test_facial_recognition.py --webcam
+Fall LSTM pipeline, metrics, and optional **pytest** invocations are documented in **`Implementation/README.md`**.
 
-# Threat detection unit tests
-python tests/test_threat_detection.py
+---
+
+## Team contributions (from Git history and merged PRs)
+
+The bullets below summarize **authored commits and merged feature branches** on this repository (work may also appear in progress PDFs under `ReportsAndDocuments/`). Approximate **non-merge commit** totals from `git log --all --no-merges`: **Advitiya ~54**, **Eric ~38**, **Reubin ~27** (author names vary slightly by machine, e.g. `Eric` vs `Eric Sanjo`).
+
+### Advitiya Sharda
+
+- **Facial recognition and API:** major work on `Implementation/api/facial_recognition.py`, `routes.py`, and app factory `api/__init__.py` — including multi-face handling, **face quality** scoring, **RecognitionBuffer** smoothing for stable `/api/recognize` results, and registration integration (`register_faces.py`, `capture_faces.py`, `calibrate_recognition.py`).
+- **Data and threats:** substantive edits to `Implementation/data/database.py`, `Implementation/api/threat_detection.py`, and related tests (`test_facial_recognition.py`, `test_face_recognition_real.py`).
+- **Dashboard and analytics:** unified dashboard wiring (`UnifiedDashboard.tsx`, KPI/chart libs, demo mode utilities), integration of **object-detection** backend pieces in collaboration with teammates, and repository hygiene (e.g. stopping tracking of local biometric artifacts, `.gitignore` updates).
+- **Merged PRs (examples):** `week11_advitiya`, `advitiya_week12`, `advitiya_week14` (see merge commits on `main`).
+
+### Eric Sanjo
+
+- **Fall detection (core research track):** Phase 1 **MediaPipe** rules-based detector, live **`fall_detection_camera.py`**, Flask **`/api/fall/*`** routes, logging and **repeated-fall** escalation, partial-body **visibility** handling, fall timestamps and **stats** alignment with the dashboard.
+- **Phase 2 LSTM:** URFD **keypoint extraction** pipeline, **LSTM training** and **`fall_lstm.keras`** integration, configurable **`FALL_DETECTOR_MODE`** (rules vs LSTM) with safe fallback in `api/__init__.py`, extended **`/api/fall/status`** metadata.
+- **Documentation and earlier ML:** API and facial-recognition documentation updates (`Implementation/docs/`, `ReportsAndDocuments/docs/`), **anomaly detection** training integration, improvements to early **face recognition** and **`routes.py`** / **`database.py`**.
+- **Frontend/API touches:** fall-related **`frontend/lib/api.ts`** and dashboard page updates where tied to backend contracts; **CSV export** improvements across dashboard pages where implemented.
+- **Merged PRs (examples):** `ericv1` … `ericv5` (see merge commits on `main`).
+
+### Reubin Chatta
+
+- **Object detection (Phase 3):** `Implementation/models/object_detection.py`, **`api/object_detection_routes.py`** registration, **YOLOv8** configuration and requirements, **fine-tuning** script for weapon-oriented classes, **API and live webcam test scripts** under `Implementation/scripts/`.
+- **Frontend UX:** large **App Router** updates — **`layout.tsx`**, **`globals.css`**, **`Sidebar.tsx`**, revamps of **alerts**, **compliance**, **logs**, **falls**, **`objects`**, and the **home** dashboard; KPI cards, animated visuals, door summaries, and alert severity summaries; collaboration on shared dashboard components (e.g. `UnifiedDashboard`, modal and traffic cards).
+- **Merged PRs (examples):** `Reubin`, `reubinv2`, `reubinv3`, `reubinv4` (see merge commits on `main`).
+
+*To reproduce contributor statistics locally:*
+
+```powershell
+cd W26_4495_S3_AdvitiyaS
+git shortlog -sne --all
+git log --all --merges --oneline
 ```
 
 ---
 
-## Compliance Notes
+## Threat rules (summary)
 
-All face data is processed and stored on the local machine. No images or personal data are uploaded to any external server. The audit log records every system action (access granted, access denied, user registered, user deleted) with a timestamp and actor identifier. This supports accountability requirements under PIPEDA (Canada) and similar privacy frameworks. Full compliance documentation is in `docs/COMPLIANCE.md`.
+| Pattern | Typical severity |
+|---------|------------------|
+| Unrecognised face | HIGH |
+| Repeated failed access | HIGH |
+| Unusual time window | MEDIUM |
+| Tailgating / wandering (as implemented) | HIGH |
+| Fall detected | CRITICAL |
+| Repeated falls (24h window) | HIGH → CRITICAL |
+
+Full tables: **`Implementation/README.md`**.
 
 ---
 
-*CSIS 4495 Applied Research Project — Douglas College, Winter 2026*
+## Ports
+
+- Flask default in this project: **5001** (see `Implementation/main.py` / env `FLASK_PORT`).
+- Next.js dev server: **3000**; proxy target in `Implementation/frontend/next.config.ts` must match Flask.
+
+---
+
+## Licence / course context
+
+Course project for **CSIS 4495 — Applied Research**, Douglas College, **Winter 2026**. Not a commercial release; configure secrets and retention appropriately before any real deployment.

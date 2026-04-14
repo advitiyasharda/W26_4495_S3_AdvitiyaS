@@ -1,157 +1,296 @@
 #!/usr/bin/env python3
 """
-Live webcam tester for the ObjectDetector model.
+Live object-detection tester for the FaceDoor smart-door system.
 
-Runs detection locally (no Flask required) and shows:
-1) Live candidate detections from base YOLO model
-2) Confirmed security events from ObjectDetector.process_frame()
+Supports webcam, video file, or image folder as input.  Runs YOLO26 (default Large)
+locally (no Flask required) and overlays bounding boxes, severity badges,
+an FPS counter, and a detection log panel in real time.
 
 Usage (run from Implementation/):
+
+  # Webcam (default camera 0)
   python3 scripts/test_object_detection_camera_live.py
+
+  # Specific camera
   python3 scripts/test_object_detection_camera_live.py --camera 1
-  python3 scripts/test_object_detection_camera_live.py --confidence 0.35 --frame-threshold 2
+
+  # Video file
+  python3 scripts/test_object_detection_camera_live.py --video path/to/clip.mp4
+
+  # Folder of images (cycles through them)
+  python3 scripts/test_object_detection_camera_live.py --images path/to/folder/
+
+  # Tweak detection params
+  python3 scripts/test_object_detection_camera_live.py --confidence 0.20 --frame-threshold 2
+
+Keys while running:
+  Q / Esc   Quit
+  SPACE     Pause / resume
+  S         Save screenshot
+  R         Reset detection counters & event log
+  H         Toggle help overlay
+  +/-       Adjust confidence threshold live (±0.05)
 """
 
 from __future__ import annotations
 
 import argparse
 import datetime as dt
+import glob
 import sys
+import time
 from pathlib import Path
 from typing import List, Tuple
 
 import cv2
 import numpy as np
 
-# Ensure project root (Implementation/) is importable when running this file directly.
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from models.object_detection import DetectionEvent, ObjectDetector
+from models.object_detection import DetectionEvent, ObjectDetector  # noqa: E402
 
+SEVERITY_COLOR = {
+    "CRITICAL": (40, 40, 220),
+    "HIGH":     (0, 135, 255),
+    "MEDIUM":   (0, 200, 255),
+    "INFO":     (220, 160, 70),
+    "LOW":      (160, 160, 160),
+}
 
-COLOR_BY_SEVERITY = {
-    "CRITICAL": (40, 40, 220),   # red-ish (BGR)
-    "HIGH": (0, 135, 255),       # orange
-    "MEDIUM": (0, 200, 255),     # amber
-    "INFO": (220, 160, 70),      # blue
-    "LOW": (160, 160, 160),      # gray
+CATEGORY_EMOJI = {
+    "WEAPON":          "!!",
+    "SECURITY_THREAT": "!?",
+    "PARCEL":          ">>",
+    "MOBILITY_AID":    "++",
+    "OPERATIONAL":     "..",
 }
 
 
 def parse_args() -> argparse.Namespace:
-    p = argparse.ArgumentParser(description="Live object detection camera test")
-    p.add_argument("--camera", type=int, default=0, help="OpenCV camera index (default: 0)")
-    p.add_argument("--confidence", type=float, default=0.45, help="YOLO confidence threshold (default: 0.45)")
-    p.add_argument("--frame-threshold", type=int, default=3, help="Consecutive frames to confirm an event")
-    p.add_argument("--unattended-minutes", type=float, default=2.0, help="Escalation timer for unattended items")
-    p.add_argument("--base-model", default="yolov8n.pt", help="Base YOLO model path")
-    p.add_argument("--weapon-model", default="models/weapon_detector.pt", help="Optional weapon model path")
-    p.add_argument("--max-candidates", type=int, default=5, help="Max raw YOLO labels shown in the side panel")
-    p.add_argument("--width", type=int, default=960, help="Display width")
-    p.add_argument("--height", type=int, default=540, help="Display height")
+    p = argparse.ArgumentParser(
+        description="Live FaceDoor object detection tester",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="Keys: Q=quit  SPACE=pause  S=screenshot  R=reset  H=help  +/-=confidence",
+    )
+    src = p.add_mutually_exclusive_group()
+    src.add_argument("--camera", type=int, default=0, help="Webcam index (default 0)")
+    src.add_argument("--video", type=str, help="Path to a video file")
+    src.add_argument("--images", type=str, help="Path to a folder of images")
+
+    p.add_argument("--confidence", type=float, default=0.20, help="YOLO floor confidence (default 0.20)")
+    p.add_argument("--frame-threshold", type=int, default=3, help="Consecutive frames to confirm")
+    p.add_argument("--unattended-minutes", type=float, default=2.0, help="Unattended escalation timer")
+    p.add_argument("--base-model", default="yolo26l.pt", help="Base YOLO model (default yolo26l.pt)")
+    p.add_argument("--weapon-model", default="models/weapon_detector.pt", help="Weapon model path")
+    p.add_argument("--width", type=int, default=1100, help="Window width")
+    p.add_argument("--height", type=int, default=640, help="Window height")
     return p.parse_args()
 
 
-def draw_banner(frame: np.ndarray, text: str, color: Tuple[int, int, int]) -> None:
-    h, w = frame.shape[:2]
-    cv2.rectangle(frame, (0, 0), (w, 42), color, -1)
-    cv2.putText(frame, text, (14, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.68, (255, 255, 255), 2, cv2.LINE_AA)
+class FrameSource:
+    """Unified source: webcam, video file, or image folder."""
+
+    def __init__(self, args: argparse.Namespace):
+        self._mode = "camera"
+        self._images: List[str] = []
+        self._img_idx = 0
+        self._cap = None
+
+        if args.video:
+            self._mode = "video"
+            self._cap = cv2.VideoCapture(args.video)
+            if not self._cap.isOpened():
+                raise SystemExit(f"Cannot open video: {args.video}")
+            self.label = f"Video: {Path(args.video).name}"
+        elif args.images:
+            self._mode = "images"
+            exts = ("*.jpg", "*.jpeg", "*.png", "*.bmp", "*.webp")
+            for ext in exts:
+                self._images.extend(glob.glob(str(Path(args.images) / ext)))
+            self._images.sort()
+            if not self._images:
+                raise SystemExit(f"No images found in {args.images}")
+            self.label = f"Images: {Path(args.images).name} ({len(self._images)} files)"
+        else:
+            self._mode = "camera"
+            self._cap = cv2.VideoCapture(args.camera)
+            if not self._cap.isOpened():
+                raise SystemExit(f"Cannot open camera {args.camera}")
+            self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
+            self._cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
+            self.label = f"Camera {args.camera}"
+
+    def read(self) -> Tuple[bool, np.ndarray | None]:
+        if self._mode == "images":
+            if self._img_idx >= len(self._images):
+                self._img_idx = 0
+            path = self._images[self._img_idx]
+            self._img_idx += 1
+            img = cv2.imread(path)
+            return (img is not None), img
+        else:
+            return self._cap.read()
+
+    def release(self):
+        if self._cap:
+            self._cap.release()
+
+    @property
+    def is_images(self) -> bool:
+        return self._mode == "images"
+
+    @property
+    def total_images(self) -> int:
+        return len(self._images)
+
+    @property
+    def current_image_name(self) -> str:
+        if self._images and self._img_idx > 0:
+            return Path(self._images[self._img_idx - 1]).name
+        return ""
 
 
-def draw_event_boxes(frame: np.ndarray, events: List[DetectionEvent]) -> None:
-    h, w = frame.shape[:2]
-    for evt in events:
-        x1n, y1n, x2n, y2n = evt.bbox
-        x1 = max(0, min(w - 1, int(x1n * w)))
-        y1 = max(0, min(h - 1, int(y1n * h)))
-        x2 = max(0, min(w - 1, int(x2n * w)))
-        y2 = max(0, min(h - 1, int(y2n * h)))
-        color = COLOR_BY_SEVERITY.get(evt.severity, (170, 170, 170))
+class HUD:
+    """Heads-up display overlay manager."""
 
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
-        label = f"{evt.object_class} | {evt.category} | {evt.severity} | {int(evt.confidence * 100)}%"
-        cv2.putText(
-            frame,
-            label,
-            (x1, max(18, y1 - 8)),
-            cv2.FONT_HERSHEY_SIMPLEX,
-            0.48,
-            color,
-            2,
-            cv2.LINE_AA,
-        )
+    @staticmethod
+    def banner(frame: np.ndarray, text: str, color: Tuple[int, int, int]):
+        h, w = frame.shape[:2]
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (0, 0), (w, 44), color, -1)
+        cv2.addWeighted(overlay, 0.85, frame, 0.15, 0, frame)
+        cv2.putText(frame, text, (14, 30), cv2.FONT_HERSHEY_SIMPLEX, 0.65, (255, 255, 255), 2, cv2.LINE_AA)
 
+    @staticmethod
+    def fps(frame: np.ndarray, fps_val: float):
+        text = f"FPS: {fps_val:.1f}"
+        cv2.putText(frame, text, (14, frame.shape[0] - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 2, cv2.LINE_AA)
+        cv2.putText(frame, text, (14, frame.shape[0] - 16), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 200, 0), 1, cv2.LINE_AA)
 
-def draw_candidates_panel(
-    frame: np.ndarray,
-    detector: ObjectDetector,
-    candidates: List[Tuple[str, float]],
-    max_rows: int,
-) -> None:
-    h, w = frame.shape[:2]
-    panel_w = 320
-    x0 = max(0, w - panel_w)
-    cv2.rectangle(frame, (x0, 42), (w, h), (245, 245, 245), -1)
-    cv2.rectangle(frame, (x0, 42), (w, h), (220, 220, 220), 1)
+    @staticmethod
+    def boxes(frame: np.ndarray, events: List[DetectionEvent]):
+        fh, fw = frame.shape[:2]
+        for evt in events:
+            x1n, y1n, x2n, y2n = evt.bbox
+            x1, y1 = int(x1n * fw), int(y1n * fh)
+            x2, y2 = int(x2n * fw), int(y2n * fh)
+            color = SEVERITY_COLOR.get(evt.severity, (170, 170, 170))
 
-    y = 66
-    line_h = 24
-    cv2.putText(frame, "Live candidates (YOLO)", (x0 + 12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (35, 35, 35), 2, cv2.LINE_AA)
-    y += line_h + 2
+            cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
 
-    if not candidates:
-        cv2.putText(frame, "No detections this frame", (x0 + 12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (120, 120, 120), 1, cv2.LINE_AA)
-        y += line_h
-    else:
-        for cls_name, conf in candidates[:max_rows]:
-            # Reuse model classifier to show mapped category/severity readability
-            # cls_id is unknown here from this tuple path, so fallback classify by class name only.
-            category, severity = detector._classify(cls_name, -1)  # pylint: disable=protected-access
-            cat = category or "IGNORE"
-            sev = severity or "-"
-            text = f"{cls_name:16s} {int(conf * 100):>2d}%  {cat}/{sev}"
-            cv2.putText(frame, text, (x0 + 12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (55, 55, 55), 1, cv2.LINE_AA)
-            y += line_h
+            label = f"{evt.object_class}  {evt.severity}  {int(evt.confidence * 100)}%"
+            (tw, th), _ = cv2.getTextSize(label, cv2.FONT_HERSHEY_SIMPLEX, 0.48, 1)
+            cv2.rectangle(frame, (x1, max(0, y1 - th - 10)), (x1 + tw + 8, y1), color, -1)
+            cv2.putText(frame, label, (x1 + 4, max(th + 2, y1 - 4)), cv2.FONT_HERSHEY_SIMPLEX, 0.48, (255, 255, 255), 1, cv2.LINE_AA)
 
-    y += 8
-    cv2.putText(frame, "Confirmed events", (x0 + 12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.55, (35, 35, 35), 2, cv2.LINE_AA)
-    y += line_h
-    recent = detector.get_recent_events(limit=4)
-    if not recent:
-        cv2.putText(frame, "None yet", (x0 + 12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (120, 120, 120), 1, cv2.LINE_AA)
-        return
+    @staticmethod
+    def sidebar(frame: np.ndarray, detector: ObjectDetector, conf_threshold: float, source_label: str):
+        fh, fw = frame.shape[:2]
+        pw = 310
+        x0 = max(0, fw - pw)
 
-    for rec in recent:
-        sev = rec.get("severity", "LOW")
-        color = COLOR_BY_SEVERITY.get(sev, (150, 150, 150))
-        text = f"{rec.get('object_class','?')}  {sev}  {int(float(rec.get('confidence', 0))*100)}%"
-        cv2.putText(frame, text, (x0 + 12, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, color, 1, cv2.LINE_AA)
-        y += line_h
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (x0, 44), (fw, fh), (30, 30, 30), -1)
+        cv2.addWeighted(overlay, 0.88, frame, 0.12, 0, frame)
 
+        y = 68
+        gap = 22
 
-def extract_candidates(detector: ObjectDetector, frame: np.ndarray) -> List[Tuple[str, float]]:
-    out: List[Tuple[str, float]] = []
-    if not detector.is_ready:
-        return out
-    model = detector._model  # pylint: disable=protected-access
-    if model is None:
-        return out
-    results = model(frame, conf=detector.confidence, verbose=False)
-    for result in results:
-        for box in result.boxes:
-            cls_id = int(box.cls[0])
-            conf = float(box.conf[0])
-            cls_name = model.names.get(cls_id, str(cls_id))
-            out.append((cls_name, conf))
-    out.sort(key=lambda x: x[1], reverse=True)
-    return out
+        cv2.putText(frame, "FaceDoor Object Detection", (x0 + 10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (130, 220, 130), 1, cv2.LINE_AA)
+        y += gap
+
+        cv2.putText(frame, f"Source: {source_label}", (x0 + 10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 180, 180), 1, cv2.LINE_AA)
+        y += gap
+
+        cv2.putText(frame, f"Conf floor: {conf_threshold:.0%}  (+/- to adjust)", (x0 + 10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (180, 180, 180), 1, cv2.LINE_AA)
+        y += gap
+
+        cv2.line(frame, (x0 + 10, y - 6), (fw - 10, y - 6), (80, 80, 80), 1)
+        y += 8
+
+        cv2.putText(frame, "RECENT EVENTS", (x0 + 10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.45, (255, 255, 255), 1, cv2.LINE_AA)
+        y += gap + 2
+
+        recent = detector.get_recent_events(limit=12)
+        if not recent:
+            cv2.putText(frame, "Waiting for detections...", (x0 + 10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.4, (120, 120, 120), 1, cv2.LINE_AA)
+            return
+
+        for rec in recent:
+            if y > fh - 30:
+                break
+            sev = rec.get("severity", "LOW")
+            cat = rec.get("category", "?")
+            cls = rec.get("object_class", "?")
+            conf = rec.get("confidence", 0)
+            color = SEVERITY_COLOR.get(sev, (150, 150, 150))
+
+            tag = CATEGORY_EMOJI.get(cat, "  ")
+            text = f"{tag} {cls:14s} {sev:8s} {int(conf * 100):>3d}%"
+            cv2.putText(frame, text, (x0 + 10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.38, color, 1, cv2.LINE_AA)
+            y += gap - 2
+
+        y += 10
+        if y < fh - 30:
+            counts = detector.get_category_counts()
+            if counts:
+                cv2.line(frame, (x0 + 10, y - 6), (fw - 10, y - 6), (80, 80, 80), 1)
+                y += 8
+                cv2.putText(frame, "TOTALS", (x0 + 10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.42, (255, 255, 255), 1, cv2.LINE_AA)
+                y += gap
+                for cat, cnt in sorted(counts.items(), key=lambda x: x[1], reverse=True):
+                    if y > fh - 20:
+                        break
+                    cv2.putText(frame, f"{cat}: {cnt}", (x0 + 10, y), cv2.FONT_HERSHEY_SIMPLEX, 0.38, (180, 180, 180), 1, cv2.LINE_AA)
+                    y += gap - 4
+
+    @staticmethod
+    def help_overlay(frame: np.ndarray):
+        fh, fw = frame.shape[:2]
+        overlay = frame.copy()
+        cv2.rectangle(overlay, (0, 0), (fw, fh), (0, 0, 0), -1)
+        cv2.addWeighted(overlay, 0.7, frame, 0.3, 0, frame)
+
+        lines = [
+            "KEYBOARD SHORTCUTS",
+            "",
+            "Q / Esc     Quit",
+            "SPACE       Pause / resume",
+            "S           Save screenshot",
+            "R           Reset event log & counters",
+            "H           Toggle this help",
+            "+           Raise confidence +5%",
+            "-           Lower confidence -5%",
+            "",
+            "Detection categories:",
+            "  !! WEAPON          (CRITICAL / HIGH)",
+            "  !? SECURITY_THREAT (HIGH)",
+            "  >> PARCEL          (INFO -> MEDIUM)",
+            "  ++ MOBILITY_AID    (INFO)",
+            "  .. OPERATIONAL     (LOW)",
+        ]
+
+        y = fh // 2 - len(lines) * 12
+        for line in lines:
+            bold = line and not line.startswith(" ") and line == line.upper()
+            color = (130, 220, 130) if bold else (220, 220, 220)
+            scale = 0.55 if bold else 0.45
+            thick = 2 if bold else 1
+            cv2.putText(frame, line, (fw // 2 - 180, y), cv2.FONT_HERSHEY_SIMPLEX, scale, color, thick, cv2.LINE_AA)
+            y += 24
+
+    @staticmethod
+    def paused(frame: np.ndarray):
+        fh, fw = frame.shape[:2]
+        cv2.putText(frame, "PAUSED", (fw // 2 - 60, fh // 2), cv2.FONT_HERSHEY_SIMPLEX, 1.0, (0, 0, 255), 3, cv2.LINE_AA)
 
 
 def main() -> None:
     args = parse_args()
 
+    print(f"\nLoading {args.base_model}...")
     detector = ObjectDetector(
         weapon_model_path=args.weapon_model,
         base_model=args.base_model,
@@ -160,58 +299,113 @@ def main() -> None:
         unattended_minutes=args.unattended_minutes,
     )
     if not detector.is_ready:
-        raise SystemExit("ObjectDetector is not ready. Ensure ultralytics and YOLO weights are available.")
+        raise SystemExit("ObjectDetector not ready. Check ultralytics install and model weights.")
 
-    cap = cv2.VideoCapture(args.camera)
-    if not cap.isOpened():
-        raise SystemExit(f"Could not open camera index {args.camera}")
+    source = FrameSource(args)
+    print(f"Source: {source.label}")
+    print("Press H for keyboard shortcuts\n")
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, args.width)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, args.height)
+    show_help = False
+    paused = False
+    frame_count = 0
+    t_start = time.time()
 
-    print("\nLive object detection started.")
-    print("Keys: Q = quit, S = screenshot, R = reset event history\n")
+    WINDOW = "FaceDoor Object Detection"
+    cv2.namedWindow(WINDOW, cv2.WINDOW_NORMAL)
+    cv2.resizeWindow(WINDOW, args.width, args.height)
+
+    last_frame = None
 
     while True:
-        ok, frame = cap.read()
-        if not ok:
-            print("Camera frame read failed; stopping.")
-            break
+        if not paused:
+            ok, frame = source.read()
+            if not ok or frame is None:
+                if source.is_images:
+                    break
+                print("Frame read failed; stopping.")
+                break
+            last_frame = frame.copy()
 
-        events = detector.process_frame(frame)
-        candidates = extract_candidates(detector, frame)
+            events = detector.process_frame(frame)
+            frame_count += 1
 
-        if any(e.severity == "CRITICAL" for e in events):
-            draw_banner(frame, "CRITICAL OBJECT DETECTED", (40, 40, 220))
-        elif events:
-            draw_banner(frame, f"{len(events)} object event(s) detected", (0, 160, 255))
+            elapsed = time.time() - t_start
+            fps_val = frame_count / elapsed if elapsed > 0 else 0.0
+
+            if any(e.severity == "CRITICAL" for e in events):
+                HUD.banner(frame, "CRITICAL DETECTION", (40, 40, 220))
+            elif events:
+                HUD.banner(frame, f"{len(events)} event(s) confirmed", (0, 140, 220))
+            else:
+                HUD.banner(frame, "Monitoring...", (60, 110, 60))
+
+            HUD.boxes(frame, events)
+            HUD.sidebar(frame, detector, detector.confidence, source.label)
+            HUD.fps(frame, fps_val)
+
+            if events:
+                for e in events:
+                    print(f"  [{e.severity:8s}] {e.category:18s} {e.object_class:16s} {e.confidence:.0%}")
         else:
-            draw_banner(frame, "Monitoring... no confirmed events", (75, 130, 75))
+            frame = last_frame.copy() if last_frame is not None else np.zeros((args.height, args.width, 3), dtype=np.uint8)
+            HUD.paused(frame)
+            HUD.sidebar(frame, detector, detector.confidence, source.label)
 
-        draw_event_boxes(frame, events)
-        draw_candidates_panel(frame, detector, candidates, args.max_candidates)
+        if show_help:
+            HUD.help_overlay(frame)
 
-        cv2.imshow("FaceDoor Object Detection Test", frame)
-        key = cv2.waitKey(1) & 0xFF
+        cv2.imshow(WINDOW, frame)
+
+        wait_ms = 500 if (source.is_images and not paused) else 1
+        key = cv2.waitKey(wait_ms) & 0xFF
 
         if key in (ord("q"), 27):
             break
-        if key == ord("r"):
-            # Reset rolling history counters
-            detector._frame_counts.clear()  # pylint: disable=protected-access
-            detector._first_seen.clear()    # pylint: disable=protected-access
-            detector._event_log.clear()     # pylint: disable=protected-access
-            print("Detector counters and event log reset.")
-        if key == ord("s"):
+        elif key == ord(" "):
+            paused = not paused
+            print("Paused." if paused else "Resumed.")
+        elif key == ord("h"):
+            show_help = not show_help
+        elif key == ord("r"):
+            detector._frame_counts.clear()
+            detector._first_seen.clear()
+            detector._ema_confidence.clear()
+            detector._event_log.clear()
+            frame_count = 0
+            t_start = time.time()
+            print("Reset: counters, event log, and EMA cleared.")
+        elif key == ord("s"):
+            ss_dir = ROOT / "screenshots"
+            ss_dir.mkdir(exist_ok=True)
             ts = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
-            out = f"screenshots/object_detect_{ts}.jpg"
+            out = str(ss_dir / f"detect_{ts}.jpg")
             cv2.imwrite(out, frame)
-            print(f"Saved screenshot: {out}")
+            print(f"Screenshot saved: {out}")
+        elif key in (ord("+"), ord("=")):
+            detector.confidence = min(0.90, detector.confidence + 0.05)
+            print(f"Confidence floor: {detector.confidence:.0%}")
+        elif key in (ord("-"), ord("_")):
+            detector.confidence = max(0.05, detector.confidence - 0.05)
+            print(f"Confidence floor: {detector.confidence:.0%}")
 
-    cap.release()
+    source.release()
     cv2.destroyAllWindows()
+
+    elapsed = time.time() - t_start
+    counts = detector.get_category_counts()
+    total = sum(counts.values())
+
+    print(f"\n{'='*50}")
+    print(f"Session summary  ({elapsed:.1f}s, {frame_count} frames)")
+    print(f"{'='*50}")
+    if counts:
+        for cat, cnt in sorted(counts.items(), key=lambda x: x[1], reverse=True):
+            print(f"  {cat:20s}  {cnt}")
+        print(f"  {'TOTAL':20s}  {total}")
+    else:
+        print("  No objects detected.")
+    print()
 
 
 if __name__ == "__main__":
     main()
-

@@ -1,3 +1,7 @@
+/**
+ * Single module for all FaceDoor UI demo/sample data and demo fallback helpers.
+ * Add new demo rows here only — do not scatter demo fixtures across other files.
+ */
 import type {
   Threat,
   AuditEntry,
@@ -11,7 +15,7 @@ import type {
 } from "./api";
 import { OBJECT_CATEGORIES, normalizeObjectCategory } from "./objectAnalytics";
 
-// ── helpers ───────────────────────────────────────────────────────────────────
+// ── timestamp helpers (demo rows only) ───────────────────────────────────────
 function ago(minutes: number) {
   return new Date(Date.now() - minutes * 60 * 1000).toISOString();
 }
@@ -480,3 +484,34 @@ DEMO_THREATS.sort(byTimeDesc);
 DEMO_FALL_EVENTS.sort(byTimeDesc);
 DEMO_OBJECT_EVENTS.sort(byTimeDesc);
 DEMO_AUDIT.sort(byTimeDesc);
+
+// ── Demo fallback behaviour (same file — no separate demoMode module) ─────────
+/**
+ * When the API returns empty data, optionally substitute the demo lists above.
+ * - Default: empty responses are filled so charts and tables work without a backend.
+ *   Opt out with `NEXT_PUBLIC_USE_DEMO_DATA=false`.
+ * - `NEXT_PUBLIC_FORCE_DEMO_DATA=true`: always use demo lists (ignores non-empty API).
+ */
+
+export function forceDemoOnly(): boolean {
+  return process.env.NEXT_PUBLIC_FORCE_DEMO_DATA === "true";
+}
+
+export function demoFallbackEnabled(): boolean {
+  return process.env.NEXT_PUBLIC_USE_DEMO_DATA !== "false";
+}
+
+export function emptyOrDemo<T>(api: T[] | undefined | null, demo: T[]): T[] {
+  if (forceDemoOnly()) return demo;
+  const list = api ?? [];
+  if (list.length > 0) return list;
+  if (demoFallbackEnabled()) return demo;
+  return [];
+}
+
+export function nullOrDemo<T>(api: T | null | undefined, demo: T): T | null {
+  if (forceDemoOnly()) return demo;
+  if (api != null) return api;
+  if (demoFallbackEnabled()) return demo;
+  return null;
+}

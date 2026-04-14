@@ -58,8 +58,8 @@ export default function InsightModalViz({
     return (
       <div className="rounded-xl bg-slate-50/50 border border-slate-100/80 p-3">
         <p className="text-[10px] font-medium text-slate-500 uppercase tracking-wide mb-2">Cumulative threats (order)</p>
-        <ResponsiveContainer width="100%" height={180}>
-          <AreaChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 0 }}>
+        <ResponsiveContainer width="100%" height={200}>
+          <AreaChart data={data} margin={{ top: 4, right: 8, left: 0, bottom: 20 }}>
             <defs>
               <linearGradient id="cumThreat" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="0%" stopColor={C.butter} stopOpacity={0.35} />
@@ -67,7 +67,7 @@ export default function InsightModalViz({
               </linearGradient>
             </defs>
             <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-            <XAxis dataKey="n" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} label={{ value: "nth threat", position: "insideBottom", offset: -4, fontSize: 9, fill: "#94a3b8" }} />
+            <XAxis dataKey="n" tick={{ fontSize: 9, fill: "#94a3b8" }} axisLine={false} tickLine={false} label={{ value: "nth threat", position: "insideBottom", offset: -14, fontSize: 9, fill: "#94a3b8" }} />
             <YAxis width={28} allowDecimals={false} tick={{ fontSize: 9, fill: "#94a3b8" }} />
             <Tooltip contentStyle={tip} />
             <Area type="stepAfter" dataKey="cumulative" stroke={C.peach} strokeWidth={2} fill="url(#cumThreat)" />

@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getThreats, Threat } from "@/lib/api";
-import { DEMO_THREATS } from "@/lib/demoData";
-import { demoFallbackEnabled, emptyOrDemo } from "@/lib/demoMode";
+import { DEMO_THREATS, demoFallbackEnabled, emptyOrDemo } from "@/lib/demoData";
 import AlertList from "@/components/AlertList";
 import PageHero from "@/components/PageHero";
 import AlertSeveritySummary from "@/components/alerts/AlertSeveritySummary";

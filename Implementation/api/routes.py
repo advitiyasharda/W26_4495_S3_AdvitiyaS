@@ -2,24 +2,81 @@
 Flask API Routes for Door Face Panels Smart Security System
 """
 import base64
+import csv
+import io
 import logging
+import os
+import signal
+import subprocess
 from datetime import datetime, timezone
 from pathlib import Path
 
 import cv2
 import numpy as np
-import io
-import csv
-from flask import Blueprint, request, jsonify, current_app, Response
+from flask import Blueprint, request, jsonify, current_app, make_response
 
 logger = logging.getLogger(__name__)
 
 api_bp = Blueprint("api", __name__)
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 
 def get_db():
     """Get database instance from Flask app"""
     return current_app.db
+
+
+def _demo_process_registry():
+    if not hasattr(current_app, "demo_processes"):
+        current_app.demo_processes = {}
+    return current_app.demo_processes
+
+
+DEMO_TOOLS = {
+    "face-register": {
+        "label": "Face registration capture",
+        "command": ["python3", "scripts/capture_faces.py", "--person", "demo_user", "--photos", "40"],
+        "kind": "camera",
+    },
+    "face-test": {
+        "label": "Face recognition test interface",
+        "command": ["python3", "tests/test_api_recognize.py", "--continuous"],
+        "kind": "camera",
+    },
+    "fall-test": {
+        "label": "Fall detection interface",
+        "command": ["python3", "scripts/fall_detection_camera.py"],
+        "kind": "camera",
+    },
+    "object-test": {
+        "label": "Object detection interface",
+        "command": ["python3", "scripts/test_object_detection_camera_live.py", "--base-model", "yolo26l.pt"],
+        "kind": "camera",
+    },
+}
+
+
+def _stop_demo_tool(tool_id: str):
+    registry = _demo_process_registry()
+    proc = registry.get(tool_id)
+    if proc is None:
+        return False
+    if proc.poll() is None:
+        try:
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+        except Exception:
+            try:
+                proc.terminate()
+            except Exception:
+                pass
+    registry.pop(tool_id, None)
+    return True
+
+
+def _slugify_person(name: str) -> str:
+    slug = "".join(ch.lower() if ch.isalnum() else "_" for ch in name.strip())
+    slug = "_".join(filter(None, slug.split("_")))
+    return slug or "demo_user"
 
 
 @api_bp.route("/health", methods=["GET"])
@@ -76,6 +133,32 @@ def recognition_status():
 
     except Exception as e:
         logger.exception("Error retrieving recognition status")
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/recognition/reload", methods=["POST"])
+def recognition_reload():
+    """Reload face encodings from data/samples into the live backend engine."""
+    try:
+        from api import _load_face_encodings_from_samples
+
+        engine = current_app.face_engine
+        engine.known_faces.clear()
+        engine.person_names.clear()
+        if hasattr(engine, "buffer"):
+            engine.buffer.reset()
+
+        loaded = _load_face_encodings_from_samples(engine, current_app.db)
+        stats = engine.get_recognition_stats()
+        return jsonify({
+            "status": "reloaded",
+            "loaded_encodings": loaded,
+            "registered_persons": stats.get("total_persons", 0),
+            "total_face_encodings": stats.get("total_face_encodings", 0),
+            "timestamp": datetime.now().isoformat(),
+        }), 200
+    except Exception as e:
+        logger.exception("Error reloading recognition encodings")
         return jsonify({"error": str(e)}), 500
 
 
@@ -505,19 +588,27 @@ def get_audit_log():
             if isinstance(ts, str) and "Z" not in ts and "+" not in ts:
                 entry["timestamp"] = ts.replace(" ", "T", 1).strip() + "Z"
             audit_log.append(entry)
-
+        fmt = (request.args.get("format") or "").strip().lower()
         if fmt == "csv":
-            columns = ["timestamp", "action", "user", "resource", "result", "details"]
-            buf = io.StringIO()
-            writer = csv.DictWriter(buf, fieldnames=columns, extrasaction="ignore")
+            output = io.StringIO()
+            fieldnames = ["timestamp", "action", "user", "resource", "result"]
+            writer = csv.DictWriter(output, fieldnames=fieldnames)
             writer.writeheader()
-            for entry in audit_log:
-                writer.writerow(entry)
-            return Response(
-                buf.getvalue(),
-                mimetype="text/csv",
-                headers={"Content-Disposition": "attachment; filename=audit-log.csv"},
+            for row in audit_log:
+                writer.writerow({
+                    "timestamp": row.get("timestamp", ""),
+                    "action": row.get("action", ""),
+                    "user": row.get("user", ""),
+                    "resource": row.get("resource", ""),
+                    "result": row.get("result", ""),
+                })
+
+            response = make_response(output.getvalue())
+            response.headers["Content-Type"] = "text/csv; charset=utf-8"
+            response.headers["Content-Disposition"] = (
+                f"attachment; filename=audit_log_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
             )
+            return response, 200
 
         return jsonify({
             "audit_log": audit_log,
@@ -528,3 +619,124 @@ def get_audit_log():
     except Exception as e:
         logger.error(f"Error retrieving audit log: {str(e)}")
         return jsonify({'error': str(e)}), 500
+
+
+@api_bp.route("/demo/tools", methods=["GET"])
+def demo_tools_status():
+    """List demo tools and current process status."""
+    try:
+        registry = _demo_process_registry()
+        items = []
+        for tool_id, meta in DEMO_TOOLS.items():
+            proc = registry.get(tool_id)
+            running = bool(proc is not None and proc.poll() is None)
+            items.append({
+                "id": tool_id,
+                "label": meta["label"],
+                "kind": meta["kind"],
+                "command": " ".join(meta["command"]),
+                "running": running,
+                "pid": proc.pid if running else None,
+            })
+        return jsonify({"tools": items, "timestamp": datetime.now().isoformat()}), 200
+    except Exception as e:
+        logger.error("Error listing demo tools: %s", e)
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/demo/tools/<tool_id>/start", methods=["POST"])
+def start_demo_tool(tool_id: str):
+    """Start a demo interface process (camera scripts/tests)."""
+    try:
+        if tool_id not in DEMO_TOOLS:
+            return jsonify({"error": f"Unknown demo tool: {tool_id}"}), 404
+
+        registry = _demo_process_registry()
+        tool = DEMO_TOOLS[tool_id]
+        payload = request.get_json(silent=True) or {}
+        command = list(tool["command"])
+
+        # Face registration supports custom user input from Demo page.
+        if tool_id == "face-register":
+            person_id = str(payload.get("person_id", "")).strip()
+            name = str(payload.get("name", "")).strip()
+            role = str(payload.get("role", "resident")).strip().lower() or "resident"
+            photos = payload.get("photos", 40)
+
+            if not person_id or not name:
+                return jsonify({"error": "person_id and name are required for face registration"}), 400
+            if role not in {"resident", "caregiver"}:
+                return jsonify({"error": "role must be resident or caregiver"}), 400
+            try:
+                photos = int(photos)
+            except Exception:
+                photos = 40
+            photos = max(1, min(100, photos))
+
+            person_folder = _slugify_person(name)
+            command = [
+                "python3",
+                "scripts/capture_faces.py",
+                "--person",
+                person_folder,
+                "--photos",
+                str(photos),
+                "--register-now",
+                "--person-id",
+                person_id,
+                "--display-name",
+                name,
+                "--role",
+                role,
+                "--reload-api-url",
+                "http://localhost:5001",
+            ]
+
+        # If this is a camera tool, stop any other running camera tool first.
+        if tool.get("kind") == "camera":
+            for other_id, other_meta in DEMO_TOOLS.items():
+                if other_id == tool_id:
+                    continue
+                if other_meta.get("kind") == "camera":
+                    _stop_demo_tool(other_id)
+
+        # Restart this tool if already running/stale.
+        _stop_demo_tool(tool_id)
+
+        proc = subprocess.Popen(
+            command,
+            cwd=str(PROJECT_ROOT),
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            stdin=subprocess.DEVNULL,
+            start_new_session=True,
+        )
+        registry[tool_id] = proc
+
+        return jsonify({
+            "status": "started",
+            "tool_id": tool_id,
+            "pid": proc.pid,
+            "command": " ".join(command),
+            "timestamp": datetime.now().isoformat(),
+        }), 200
+    except Exception as e:
+        logger.error("Error starting demo tool %s: %s", tool_id, e)
+        return jsonify({"error": str(e)}), 500
+
+
+@api_bp.route("/demo/tools/<tool_id>/stop", methods=["POST"])
+def stop_demo_tool(tool_id: str):
+    """Stop a running demo interface process."""
+    try:
+        if tool_id not in DEMO_TOOLS:
+            return jsonify({"error": f"Unknown demo tool: {tool_id}"}), 404
+        stopped = _stop_demo_tool(tool_id)
+        return jsonify({
+            "status": "stopped" if stopped else "not_running",
+            "tool_id": tool_id,
+            "timestamp": datetime.now().isoformat(),
+        }), 200
+    except Exception as e:
+        logger.error("Error stopping demo tool %s: %s", tool_id, e)
+        return jsonify({"error": str(e)}), 500

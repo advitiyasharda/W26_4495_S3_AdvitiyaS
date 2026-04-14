@@ -31,6 +31,27 @@ What it does:
 
 import sys
 import os
+import types
+
+# Keep AVFoundation enabled on macOS; disabling it can make webcams unavailable.
+if sys.platform == "darwin":
+    os.environ.setdefault("OPENCV_VIDEOIO_PRIORITY_AVFOUNDATION", "1000")
+os.environ.setdefault("MEDIAPIPE_DISABLE_GPU", "1")
+os.environ.setdefault("OMP_NUM_THREADS", "1")
+os.environ.setdefault("OPENBLAS_NUM_THREADS", "1")
+os.environ.setdefault("MKL_NUM_THREADS", "1")
+
+# Block TensorFlow from loading during mediapipe import — it is optional
+# (only used for docgen) and causes a protobuf ABI conflict on macOS.
+if "tensorflow" not in sys.modules:
+    sys.modules["tensorflow"] = types.ModuleType("tensorflow")
+    sys.modules["tensorflow.tools"] = types.ModuleType("tensorflow.tools")
+    sys.modules["tensorflow.tools.docs"] = types.ModuleType("tensorflow.tools.docs")
+    _no_op = lambda x: x
+    sys.modules["tensorflow.tools.docs"].doc_controls = types.SimpleNamespace(
+        do_not_generate_docs=_no_op,
+    )
+
 import time
 import argparse
 import logging
@@ -178,6 +199,36 @@ def run(args):
     from models.fall_detection import FallDetector
     from models.fall_detection_trained import LSTMFallDetector
 
+    if args.skip < 1:
+        logger.warning("--skip must be >= 1; defaulting to 1")
+        args.skip = 1
+
+    # Open camera before detector init. On some macOS setups, MediaPipe/TFLite
+    # initialisation first can interfere with OpenCV camera acquisition.
+    backend_candidates = [("default", None)]
+    if hasattr(cv2, "CAP_AVFOUNDATION"):
+        backend_candidates.append(("avfoundation", cv2.CAP_AVFOUNDATION))
+    if hasattr(cv2, "CAP_ANY"):
+        backend_candidates.append(("any", cv2.CAP_ANY))
+
+    cap = None
+    selected_backend = "unknown"
+    for backend_name, backend_flag in backend_candidates:
+        candidate = (
+            cv2.VideoCapture(args.camera)
+            if backend_flag is None
+            else cv2.VideoCapture(args.camera, backend_flag)
+        )
+        if candidate.isOpened():
+            cap = candidate
+            selected_backend = backend_name
+            break
+        candidate.release()
+
+    if cap is None:
+        logger.error("Cannot open camera %d. Try a different --camera index.", args.camera)
+        sys.exit(1)
+
     if args.lstm:
         logger.info("Using Phase 2 LSTM fall detector")
         detector = LSTMFallDetector(threshold=args.threshold)
@@ -187,21 +238,6 @@ def run(args):
         detector = FallDetector(fall_threshold=args.threshold)
         detector_source = "rules"
 
-    if args.skip < 1:
-        logger.warning("--skip must be >= 1; defaulting to 1")
-        args.skip = 1
-
-    # On Windows, CAP_DSHOW opens USB cameras much faster than the default backend.
-    # Fall back to default if DirectShow isn't available (Linux/Mac).
-    cap = cv2.VideoCapture(args.camera, cv2.CAP_DSHOW)
-    if not cap.isOpened():
-        logger.warning("DirectShow open failed for camera %d, retrying with default backend…",
-                       args.camera)
-        cap = cv2.VideoCapture(args.camera)
-    if not cap.isOpened():
-        logger.error("Cannot open camera %d. Try a different --camera index.", args.camera)
-        sys.exit(1)
-
     # Try to set a decent resolution
     cap.set(cv2.CAP_PROP_FRAME_WIDTH,  1280)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 720)
@@ -210,7 +246,7 @@ def run(args):
     actual_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
     actual_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     actual_fps = cap.get(cv2.CAP_PROP_FPS)
-    logger.info("Camera opened: %dx%d @ %.0f fps", actual_w, actual_h, actual_fps)
+    logger.info("Camera opened (%s backend): %dx%d @ %.0f fps", selected_backend, actual_w, actual_h, actual_fps)
     logger.info("Fall threshold set to %.2f", args.threshold)
     if not args.no_display:
         logger.info("Press Q to quit | S to screenshot | R to reset")

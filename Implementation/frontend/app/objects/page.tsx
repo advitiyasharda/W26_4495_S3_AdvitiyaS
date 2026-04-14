@@ -19,17 +19,15 @@ import {
   countBySeverity,
   eventNeedsReview,
   normalizeObjectCategory,
-  objectEventsPerHour,
+  hourlyCategoryStack,
   sortEventsByAttention,
 } from "@/lib/objectAnalytics";
 import { chart as chartPalette, objectCategoryFill, severityFill } from "@/lib/theme";
 import ObjectCategoryBar from "@/components/ObjectCategoryBar";
 import { ObjectCategoryIcon } from "@/components/icons/ObjectCategoryIcons";
 import PageHero from "@/components/PageHero";
-import { IconDownload, IconObjectFrame } from "@/components/icons/DoorIcons";
-import { downloadCsv, objectsToCsvRows } from "@/lib/reportExport";
-import { DEMO_OBJECT_EVENTS, DEMO_OBJECT_STATUS } from "@/lib/demoData";
-import { demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoMode";
+import { IconObjectFrame } from "@/components/icons/DoorIcons";
+import { DEMO_OBJECT_EVENTS, DEMO_OBJECT_STATUS, demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoData";
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleString("en-US", {
@@ -97,8 +95,11 @@ export default function ObjectsPage() {
 
   const byCat = useMemo(() => countByCategory(filtered), [filtered]);
   const bySev = useMemo(() => countBySeverity(filtered), [filtered]);
-  const hourly = useMemo(() => objectEventsPerHour(filtered), [filtered]);
-  const hourlyMax = useMemo(() => (hourly.length ? Math.max(...hourly.map((h) => h.count), 1) : 1), [hourly]);
+  const hourly = useMemo(() => hourlyCategoryStack(filtered), [filtered]);
+  const hourlyMax = useMemo(() => {
+    if (!hourly.length) return 1;
+    return Math.max(...hourly.map(h => OBJECT_CATEGORIES.reduce((acc, c) => acc + (h[c] || 0), 0)), 1);
+  }, [hourly]);
   const avgConf = useMemo(() => avgConfidence(filtered), [filtered]);
 
   const todayStr = new Date().toDateString();
@@ -110,7 +111,7 @@ export default function ObjectsPage() {
   const sevTotal = OBJECT_SEVERITIES.reduce((s, k) => s + bySev[k], 0);
 
   return (
-    <div className="space-y-8 max-w-5xl mx-auto">
+    <div className="space-y-8">
       <PageHero
         tone="violet"
         eyebrow="Smart door · Same camera as access"
@@ -294,19 +295,21 @@ export default function ObjectsPage() {
 
       {/* Timeline — area chart matches KPI modal language; respects filters */}
       <section className="rounded-2xl border border-slate-200/70 bg-white p-6 shadow-sm">
-        <h2 className="text-sm font-semibold text-slate-800">Activity by hour</h2>
-        <p className="text-xs text-slate-500 mt-0.5 mb-4">Local time · same metric as the dashboard object card detail</p>
-        {hourly.length === 0 ? (
+        <h2 className="text-sm font-semibold text-slate-800">Activity by hour (Stacked)</h2>
+        <p className="text-xs text-slate-500 mt-0.5 mb-4">Chronological breakdown showing relative volume of each policy category</p>
+        {filtered.length === 0 ? (
           <p className="text-sm text-slate-400 py-16 text-center">No events in this view</p>
         ) : (
-          <div className="h-[220px] w-full">
+          <div className="h-[280px] w-full">
             <ResponsiveContainer width="100%" height="100%">
               <AreaChart data={hourly} margin={{ top: 8, right: 8, left: -8, bottom: 0 }}>
                 <defs>
-                  <linearGradient id="objectsPageHourGrad" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor={chartPalette.lilac} stopOpacity={0.4} />
-                    <stop offset="100%" stopColor={chartPalette.lilac} stopOpacity={0} />
-                  </linearGradient>
+                  {OBJECT_CATEGORIES.map((c) => (
+                    <linearGradient key={c} id={`grad_${c}`} x1="0" y1="0" x2="0" y2="1">
+                      <stop offset="0%" stopColor={objectCategoryFill[c]} stopOpacity={0.7} />
+                      <stop offset="100%" stopColor={objectCategoryFill[c]} stopOpacity={0.15} />
+                    </linearGradient>
+                  ))}
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" vertical={false} />
                 <XAxis dataKey="hour" tick={{ fontSize: 10, fill: "#94a3b8" }} interval={3} axisLine={false} tickLine={false} />
@@ -319,16 +322,27 @@ export default function ObjectsPage() {
                   tickLine={false}
                 />
                 <Tooltip
-                  cursor={{ stroke: chartPalette.lilac, strokeWidth: 1, strokeDasharray: "4 4" }}
-                  contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12 }}
+                  cursor={{ stroke: "#e2e8f0", strokeWidth: 1, strokeDasharray: "4 4" }}
+                  contentStyle={{ borderRadius: 12, border: "1px solid #e2e8f0", fontSize: 12, zIndex: 50 }}
+                  itemStyle={{ fontSize: 12, fontWeight: 500 }}
+                  formatter={(val: number | undefined, name: string | undefined) => {
+                     const catLabel = OBJECT_CATEGORY_GUIDE[(name || "") as ObjectCategory]?.shortLabel ?? (name || "");
+                     return [val ?? 0, catLabel];
+                  }}
+                  filterNull={true}
                 />
-                <Area
-                  type="monotone"
-                  dataKey="count"
-                  stroke={chartPalette.lilac}
-                  strokeWidth={2}
-                  fill="url(#objectsPageHourGrad)"
-                />
+                {OBJECT_CATEGORIES.map((c) => (
+                  <Area
+                    key={c}
+                    type="monotone"
+                    dataKey={c}
+                    stackId="1"
+                    stroke={objectCategoryFill[c]}
+                    strokeWidth={2}
+                    fill={`url(#grad_${c})`}
+                    activeDot={{ r: 5, strokeWidth: 0 }}
+                  />
+                ))}
               </AreaChart>
             </ResponsiveContainer>
           </div>

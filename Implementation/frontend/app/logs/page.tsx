@@ -2,8 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getAccessLogs, getUsers, deleteUser, AccessLog, User } from "@/lib/api";
-import { DEMO_LOGS, DEMO_USERS } from "@/lib/demoData";
-import { emptyOrDemo } from "@/lib/demoMode";
+import { DEMO_LOGS, DEMO_USERS, emptyOrDemo } from "@/lib/demoData";
 import AccessLogsTable from "@/components/AccessLogsTable";
 import PageHero from "@/components/PageHero";
 import LogsDoorSummary from "@/components/logs/LogsDoorSummary";

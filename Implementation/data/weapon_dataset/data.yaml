@@ -1,0 +1,11 @@
+path: /Users/reubin/Projects/Clone_Project/W26_4495_S3_AdvitiyaS/Implementation/data/weapon_dataset
+train: images/train
+val: images/val
+test: images/test
+
+names:
+  0: gun
+  1: knife
+  2: person
+
+nc: 3

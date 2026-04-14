@@ -11,6 +11,7 @@ import {
   IconClipboard,
   IconDashboard,
   IconDoorPanel,
+  IconFaceScan,
   IconFallMotion,
   IconSearchObject,
   IconUser,
@@ -23,6 +24,7 @@ const icons = {
   objects: <IconSearchObject className="w-5 h-5" />,
   logs: <IconClipboard className="w-5 h-5" />,
   compliance: <IconAuditTrail className="w-5 h-5" />,
+  demo: <IconFaceScan className="w-5 h-5" />,
   chevronRight: <IconChevronRight className="w-4 h-4" />,
   chevronLeft: <IconChevronLeft className="w-4 h-4" />,
   door: <IconDoorPanel className="w-6 h-6" />,
@@ -70,6 +72,7 @@ const sectionLabelTint: Record<string, string> = {
   MONITORING: "text-teal-600/55",
   SECURITY: "text-amber-700/45",
   COMPLIANCE: "text-indigo-600/50",
+  DEMO: "text-violet-600/50",
 };
 
 const sections: {
@@ -95,7 +98,12 @@ const sections: {
   },
   {
     label: "COMPLIANCE",
+    separatorAfter: true,
     items: [{ href: "/compliance", label: "Audit Trail", icon: "compliance", accent: "indigo" }],
+  },
+  {
+    label: "DEMO",
+    items: [{ href: "/demo", label: "Demo Center", icon: "demo", accent: "violet" }],
   },
 ];
 
@@ -188,6 +196,9 @@ export default function Sidebar() {
             <div className="min-w-0">
               <p className="text-sm font-medium text-slate-700 truncate">Admin</p>
               <p className="text-xs text-slate-400 truncate">Caregiver Dashboard</p>
+              <Link href="/demo" className="text-[11px] font-semibold text-violet-700 hover:underline mt-1 inline-block">
+                Open Demo Center
+              </Link>
             </div>
           )}
         </div>

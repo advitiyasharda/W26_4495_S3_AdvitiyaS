@@ -1,9 +1,9 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAuditLog, AuditEntry } from "@/lib/api";
-import { DEMO_AUDIT } from "@/lib/demoData";
-import { demoFallbackEnabled, emptyOrDemo } from "@/lib/demoMode";
+import { exportAuditTrailCsv } from "@/lib/reportExport";
+import { DEMO_AUDIT, demoFallbackEnabled, emptyOrDemo } from "@/lib/demoData";
 import AuditTable from "@/components/AuditTable";
 import PageHero from "@/components/PageHero";
 import ComplianceActionChart from "@/components/compliance/ComplianceActionChart";
@@ -14,6 +14,7 @@ export default function CompliancePage() {
   const [loading, setLoading] = useState(true);
   const [limit, setLimit] = useState(50);
   const [usingDemo, setUsingDemo] = useState(false);
+  const [exporting, setExporting] = useState(false);
 
   const load = async (l: number) => {
     setLoading(true);
@@ -35,6 +36,19 @@ export default function CompliancePage() {
     return { ok, fail, access, total: entries.length };
   }, [entries]);
 
+  const handleExportCsv = useCallback(async () => {
+    setExporting(true);
+    const params = new URLSearchParams({
+      format: "csv",
+      limit: String(Math.max(limit, 500)),
+    });
+    try {
+      await exportAuditTrailCsv(`/api/compliance/audit?${params.toString()}`, entries);
+    } finally {
+      setExporting(false);
+    }
+  }, [entries, limit]);
+
   return (
     <div className="space-y-6">
       <PageHero
@@ -55,13 +69,15 @@ export default function CompliancePage() {
                 Demo data
               </span>
             )}
-            <a
-              href="/api/compliance/audit?format=csv"
-              className="inline-flex items-center gap-2 bg-white/95 border border-violet-200/80 text-violet-900 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-violet-50/80 transition-colors shadow-sm"
+            <button
+              type="button"
+              onClick={handleExportCsv}
+              disabled={exporting}
+              className="inline-flex items-center gap-2 bg-white/95 border border-violet-200/80 text-violet-900 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-violet-50/80 transition-colors shadow-sm disabled:opacity-60 disabled:pointer-events-none"
             >
               <IconDownload className="w-4 h-4" />
-              Export CSV
-            </a>
+              {exporting ? "Preparing…" : "Export CSV"}
+            </button>
           </div>
         }
       />

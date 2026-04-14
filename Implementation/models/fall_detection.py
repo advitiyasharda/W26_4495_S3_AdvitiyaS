@@ -112,7 +112,6 @@ class FallDetector:
             import mediapipe as mp
             self._mp   = mp
             self._vis  = mp.tasks.vision
-            self._draw = mp.tasks.vision.drawing_utils
 
             BaseOptions        = mp.tasks.BaseOptions
             PoseLandmarker     = mp.tasks.vision.PoseLandmarker
@@ -259,18 +258,32 @@ class FallDetector:
         detection = self._landmarker.detect(mp_img)
 
         if detection.pose_landmarks:
-            PoseLandmarksConnections = mp.tasks.vision.PoseLandmarksConnections
-            drawing_utils  = mp.tasks.vision.drawing_utils
-            drawing_styles = mp.tasks.vision.drawing_styles
-
-            annotated = np.copy(frame)   # draw directly on BGR copy
-            for pose_lm in detection.pose_landmarks:
-                drawing_utils.draw_landmarks(
-                    annotated,
-                    pose_lm,
-                    PoseLandmarksConnections.POSE_LANDMARKS,
-                    landmark_drawing_spec=drawing_styles.get_default_pose_landmarks_style(),
-                )
+            annotated = np.copy(frame)
+            try:
+                PoseLandmarksConnections = mp.tasks.vision.PoseLandmarksConnections
+                drawing_utils  = mp.tasks.vision.drawing_utils
+                drawing_styles = mp.tasks.vision.drawing_styles
+                for pose_lm in detection.pose_landmarks:
+                    drawing_utils.draw_landmarks(
+                        annotated,
+                        pose_lm,
+                        PoseLandmarksConnections.POSE_LANDMARKS,
+                        landmark_drawing_spec=drawing_styles.get_default_pose_landmarks_style(),
+                    )
+            except AttributeError:
+                mp_drawing = mp.solutions.drawing_utils
+                mp_style   = mp.solutions.drawing_styles
+                mp_pose    = mp.solutions.pose
+                for pose_lm in detection.pose_landmarks:
+                    from mediapipe.framework.formats.landmark_pb2 import NormalizedLandmarkList, NormalizedLandmark
+                    proto_lm = NormalizedLandmarkList(
+                        landmark=[NormalizedLandmark(x=l.x, y=l.y, z=l.z) for l in pose_lm]
+                    )
+                    mp_drawing.draw_landmarks(
+                        annotated, proto_lm,
+                        mp_pose.POSE_CONNECTIONS,
+                        mp_style.get_default_pose_landmarks_style(),
+                    )
             frame = annotated
 
         h, w = frame.shape[:2]

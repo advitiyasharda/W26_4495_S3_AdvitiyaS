@@ -170,17 +170,21 @@ class Database:
         n = cursor.fetchone()[0]
         return f"RES-{n:03d}"
 
-    def add_user(self, user_id: str, name: str, role: str = 'resident') -> bool:
-        """Add a new user; assigns a display_id (e.g. RES-001) for Person ID column."""
+    def add_user(self, user_id: str, name: str, role: str = 'resident', display_id: str = None) -> bool:
+        """Add a new user; uses provided display_id or auto-assigns RES-xxx."""
         try:
             cursor = self.conn.cursor()
-            display_id = self._next_display_id(cursor)
+            resolved_display_id = (display_id or "").strip() or self._next_display_id(cursor)
             cursor.execute('''
                 INSERT OR IGNORE INTO users (user_id, name, role, display_id)
                 VALUES (?, ?, ?, ?)
-            ''', (user_id, name, role, display_id))
+            ''', (user_id, name, role, resolved_display_id))
             if cursor.rowcount == 0:
-                # User already exists; backfill display_id if missing
+                # User already exists; update name/role and backfill display_id if missing.
+                cursor.execute(
+                    "UPDATE users SET name = ?, role = ? WHERE user_id = ?",
+                    (name, role, user_id)
+                )
                 cursor.execute(
                     "UPDATE users SET display_id = ? WHERE user_id = ? AND (display_id IS NULL OR display_id = '')",
                     (self._next_display_id(cursor), user_id)

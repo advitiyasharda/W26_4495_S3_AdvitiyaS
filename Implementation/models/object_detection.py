@@ -1,24 +1,28 @@
 """
-Object Detection Module — Phase 3 (YOLOv8)
+Object Detection Module — Phase 3 (YOLO26)
 
 Detects security-relevant objects at the door and classifies them into
-five categories with associated threat levels:
+five categories with associated threat levels for an elderly-care
+smart-door system:
 
-  Category          Threat level   Examples
+  Category          Default sev.   Door-security context
   ─────────────────────────────────────────────────────────────────────
-  WEAPON            CRITICAL       knife, scissors (COCO); gun (custom)
-  SECURITY_THREAT   HIGH/MEDIUM    sports gear, ambiguous items (not luggage)
-  PARCEL            INFO/LOW       handbag, backpack, suitcase at the entrance
-  MOBILITY_AID      INFO           wheelchair proxy objects
-  OPERATIONAL       LOW            bottle, cup, chair near entrance
+  WEAPON            CRITICAL       knife, scissors, bat; custom model guns
+  SECURITY_THREAT   HIGH           unusual / policy-flagged items at ingress
+  PARCEL            INFO→MEDIUM    bags, deliveries — escalates when unattended
+  MOBILITY_AID      INFO           wheelchair, walker, umbrella (elderly care)
+  OPERATIONAL       LOW→MEDIUM     person, pet, bottles — routine but tracked
 
-Frame-filtering:
-  An object must be detected in FRAME_THRESHOLD consecutive frames before
-  an alert fires — this prevents one-frame false positives.
-
-Unattended-item timer:
-  If a PARCEL or SECURITY_THREAT object remains in frame for longer than
-  UNATTENDED_MINUTES the severity is escalated to MEDIUM.
+Accuracy pipeline (improvements over Phase 3 v1):
+  • YOLO26l base model (Large — stronger than YOLO26m; heavier inference)
+  • NMS-free end-to-end design (no separate post-processing step)
+  • Padded weapon verification: reflected-border re-inference when any
+    weapon-class hint is found — restores context for close-up weapons
+  • CLAHE contrast-enhancement for backlit / shadowed doorways
+  • Per-category confidence thresholds (lower for weapons, higher for noise)
+  • Cross-model IoU-based NMS when weapon model is active
+  • Exponential-moving-average confidence smoothing per class
+  • Person-at-door awareness: bbox position → standing vs low-position alert
 """
 
 from __future__ import annotations
@@ -30,67 +34,74 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
+import cv2
 import numpy as np
 
 logger = logging.getLogger(__name__)
 
 # ── COCO class → category / severity mapping ─────────────────────────────────
-# Numbers are COCO class IDs used by YOLOv8n.
+# IDs match the 80-class COCO set used by YOLOv8.
 
-# Classes that are always weapons regardless of context
 _WEAPON_CLASSES: Dict[int, str] = {
-    43: "knife",       # COCO 43 — knife
-    76: "scissors",    # COCO 76 — scissors (can be used as weapon)
-    34: "baseball_bat",  # COCO 34 — blunt weapon / improvised
+    43: "knife",
+    76: "scissors",
+    34: "baseball_bat",
 }
 
-# Luggage & carriers at the door — classified as PARCEL (checked before generic threats)
 _PARCEL_CLASSES: Dict[int, str] = {
     24: "backpack",
     26: "handbag",
     28: "suitcase",
 }
 
-# Non-luggage anomalies & sports equipment (no overlap with _PARCEL_CLASSES)
 _SECURITY_THREAT_CLASSES: Dict[int, str] = {
-    33: "sports_ball",  # proxy for thrown object
-    35: "baseball_glove",
     36: "skateboard",
     38: "tennis_racket",
-    74: "clock",        # unusual standalone object
 }
 
-# Classes that indicate mobility / medical aid
 _MOBILITY_AID_CLASSES: Dict[int, str] = {
-    56: "chair",       # proxy for wheelchair
-    57: "couch",       # gurney-like
-    62: "tv",          # medical monitor (loose proxy)
-    72: "refrigerator",# O2 / medical equipment (loose)
+    56: "chair",        # wheelchair proxy
+    25: "umbrella",     # walking-aid / cane proxy, also commonly left at doors
 }
 
-# Operational / facility-management hazards
 _OPERATIONAL_CLASSES: Dict[int, str] = {
-    39: "bottle",      # spilled liquid / slip hazard
+    0:  "person",
+    39: "bottle",
     41: "cup",
     42: "fork",
     44: "spoon",
     45: "bowl",
-    17: "cat",         # escaped pet
+    17: "cat",
     16: "dog",
-    0:  "person",      # fallen person near door (complement to fall detection)
+    67: "cell_phone",
+    73: "book",
+    58: "potted_plant",
 }
 
-# Custom class names added by the fine-tuned weapon model
 _CUSTOM_WEAPON_NAMES = {"gun", "pistol", "rifle", "handgun", "firearm", "weapon"}
 
-# Severity for each category
-_CATEGORY_SEVERITY = {
+_CATEGORY_SEVERITY: Dict[str, str] = {
     "WEAPON":          "CRITICAL",
     "SECURITY_THREAT": "HIGH",
     "PARCEL":          "INFO",
     "MOBILITY_AID":    "INFO",
     "OPERATIONAL":     "LOW",
 }
+
+_CATEGORY_CONFIDENCE: Dict[str, float] = {
+    "WEAPON":          0.20,
+    "SECURITY_THREAT": 0.35,
+    "PARCEL":          0.35,
+    "MOBILITY_AID":    0.40,
+    "OPERATIONAL":     0.45,
+}
+
+_CONFIDENCE_EMA_ALPHA = 0.6
+
+_ALL_WEAPON_IDS = set(_WEAPON_CLASSES.keys())
+
+_WEAPON_VERIFY_FLOOR = 0.12
+_WEAPON_PAD_RATIO = 0.25
 
 
 @dataclass
@@ -108,45 +119,48 @@ class DetectionEvent:
 
 class ObjectDetector:
     """
-    YOLOv8-based object detector for door security.
+    YOLO26-based object detector for elderly-care door security.
 
-    Usage
-    -----
-    detector = ObjectDetector(
-        weapon_model_path="models/weapon_detector.pt",   # optional
-        base_model="yolov8n.pt",
-        confidence=0.45,
-        frame_threshold=3,
-        unattended_minutes=2.0,
-    )
-    events = detector.process_frame(bgr_frame)
+    v2 improvements over the original:
+      – YOLO26l default (Large variant — higher accuracy than YOLO26m, more compute)
+      – NMS-free end-to-end inference (built into YOLO26)
+      – Padded weapon verification (reflected-border re-inference on weapon hints)
+      – CLAHE preprocessing for mixed doorway lighting
+      – Per-category confidence floors
+      – Cross-model NMS to deduplicate weapon / COCO overlaps
+      – EMA confidence smoothing for temporal stability
+      – Person-at-door position awareness
     """
 
     def __init__(
         self,
         weapon_model_path: str = "models/weapon_detector.pt",
-        base_model: str = "yolov8n.pt",
-        confidence: float = 0.45,
+        base_model: str = "yolo26l.pt",
+        confidence: float = 0.20,
         frame_threshold: int = 3,
         unattended_minutes: float = 2.0,
+        imgsz: int = 640,
+        enable_preprocessing: bool = True,
     ) -> None:
         self.confidence = confidence
         self.frame_threshold = frame_threshold
         self.unattended_seconds = unattended_minutes * 60.0
+        self.imgsz = imgsz
+        self.enable_preprocessing = enable_preprocessing
 
-        self._model = None          # base YOLOv8 model (COCO)
-        self._weapon_model = None   # optional fine-tuned weapon model
+        self._model = None
+        self._weapon_model = None
         self._model_ready = False
         self._weapon_model_ready = False
 
-        # Per-class consecutive-frame counters for false-positive filtering
         self._frame_counts: Dict[str, int] = defaultdict(int)
-
-        # Unattended-item tracking: class_name → first-seen timestamp
         self._first_seen: Dict[str, float] = {}
 
-        # Rolling event log (capped at 500 events)
+        self._ema_confidence: Dict[str, float] = {}
+
         self._event_log: List[Dict] = []
+
+        self._clahe = cv2.createCLAHE(clipLimit=2.5, tileGridSize=(8, 8))
 
         self._load_models(weapon_model_path, base_model)
 
@@ -161,7 +175,6 @@ class ObjectDetector:
             )
             return
 
-        # 1. Try to load the fine-tuned weapon model
         wp = Path(weapon_model_path)
         if wp.exists():
             try:
@@ -171,13 +184,153 @@ class ObjectDetector:
             except Exception as e:
                 logger.warning("Could not load weapon model %s: %s", wp, e)
 
-        # 2. Load the base COCO model (always)
         try:
             self._model = YOLO(base_model)
             self._model_ready = True
-            logger.info("Base YOLOv8 model loaded: %s", base_model)
+            logger.info("Base YOLO model loaded: %s", base_model)
         except Exception as e:
             logger.error("Could not load base YOLO model %s: %s", base_model, e)
+
+    # ── Preprocessing ─────────────────────────────────────────────────────────
+
+    def _preprocess(self, frame: np.ndarray) -> np.ndarray:
+        """Adaptive CLAHE: only enhance contrast on dark doorway frames."""
+        if not self.enable_preprocessing:
+            return frame
+
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        mean_brightness = float(gray.mean())
+
+        if mean_brightness < 85:
+            lab = cv2.cvtColor(frame, cv2.COLOR_BGR2LAB)
+            l_ch, a_ch, b_ch = cv2.split(lab)
+            l_ch = self._clahe.apply(l_ch)
+            enhanced = cv2.merge([l_ch, a_ch, b_ch])
+            return cv2.cvtColor(enhanced, cv2.COLOR_LAB2BGR)
+
+        return frame
+
+    # ── Cross-model NMS ───────────────────────────────────────────────────────
+
+    @staticmethod
+    def _iou(box_a: Tuple, box_b: Tuple) -> float:
+        """Intersection-over-Union for two normalised (x1,y1,x2,y2) boxes."""
+        x1 = max(box_a[0], box_b[0])
+        y1 = max(box_a[1], box_b[1])
+        x2 = min(box_a[2], box_b[2])
+        y2 = min(box_a[3], box_b[3])
+        inter = max(0.0, x2 - x1) * max(0.0, y2 - y1)
+        area_a = (box_a[2] - box_a[0]) * (box_a[3] - box_a[1])
+        area_b = (box_b[2] - box_b[0]) * (box_b[3] - box_b[1])
+        union = area_a + area_b - inter
+        return inter / union if union > 0 else 0.0
+
+    def _cross_model_nms(
+        self, detections: List[Tuple], iou_threshold: float = 0.45
+    ) -> List[Tuple]:
+        """Remove overlapping boxes across models, keeping higher confidence."""
+        if len(detections) <= 1:
+            return detections
+
+        sorted_dets = sorted(detections, key=lambda d: d[1], reverse=True)
+        keep: List[Tuple] = []
+
+        for det in sorted_dets:
+            suppressed = False
+            for kept in keep:
+                if self._iou(det[2], kept[2]) > iou_threshold:
+                    suppressed = True
+                    break
+            if not suppressed:
+                keep.append(det)
+
+        return keep
+
+    # ── Weapon verification via padded re-inference ─────────────────────────
+
+    def _run_inference(
+        self, frame: np.ndarray, conf: float, imgsz: int,
+    ) -> List[Tuple[str, float, Tuple, int]]:
+        """Run the base model and return raw (name, conf, bbox, cls_id) tuples."""
+        detections: List[Tuple[str, float, Tuple, int]] = []
+        try:
+            results = self._model(
+                frame, conf=conf, imgsz=imgsz, verbose=False,
+            )
+            for result in results:
+                for box in result.boxes:
+                    cls_id = int(box.cls[0])
+                    c = float(box.conf[0])
+                    xyxyn = tuple(float(v) for v in box.xyxyn[0])
+                    cls_name = self._model.names.get(cls_id, str(cls_id))
+                    detections.append((cls_name, c, xyxyn, cls_id))
+        except Exception as e:
+            logger.warning("Inference error (imgsz=%d): %s", imgsz, e)
+        return detections
+
+    def _weapon_verify(
+        self, frame: np.ndarray, base_dets: List[Tuple],
+    ) -> List[Tuple]:
+        """
+        When a weapon hint is found in the base pass (even at very low
+        confidence), re-run on a padded copy of the frame.  YOLO models are
+        trained on images where objects have surrounding context; padding with
+        reflected borders restores that context for close-up weapon images and
+        significantly boosts detection confidence.
+
+        Only triggers when a potential weapon exists — normal non-weapon frames
+        stay at the fast single-pass speed.
+        """
+        has_weapon_hint = any(
+            d[3] in _ALL_WEAPON_IDS or d[0].lower() in _CUSTOM_WEAPON_NAMES
+            for d in base_dets
+        )
+        if not has_weapon_hint:
+            return base_dets
+
+        h, w = frame.shape[:2]
+        pad_y = int(h * _WEAPON_PAD_RATIO)
+        pad_x = int(w * _WEAPON_PAD_RATIO)
+        padded = cv2.copyMakeBorder(
+            frame, pad_y, pad_y, pad_x, pad_x, cv2.BORDER_REFLECT_101,
+        )
+
+        padded_dets = self._run_inference(padded, conf=_WEAPON_VERIFY_FLOOR, imgsz=self.imgsz)
+
+        ph, pw = padded.shape[:2]
+        weapon_padded: Dict[int, Tuple] = {}
+        for d in padded_dets:
+            cid = d[3]
+            is_weapon = cid in _ALL_WEAPON_IDS or d[0].lower() in _CUSTOM_WEAPON_NAMES
+            if not is_weapon:
+                continue
+            ox1 = (d[2][0] * pw - pad_x) / w
+            oy1 = (d[2][1] * ph - pad_y) / h
+            ox2 = (d[2][2] * pw - pad_x) / w
+            oy2 = (d[2][3] * ph - pad_y) / h
+            remapped = (d[0], d[1], (ox1, oy1, ox2, oy2), cid)
+            existing = weapon_padded.get(cid)
+            if existing is None or d[1] > existing[1]:
+                weapon_padded[cid] = remapped
+
+        merged: List[Tuple] = []
+        seen_weapon_ids: set = set()
+        for d in base_dets:
+            cid = d[3]
+            is_weapon = cid in _ALL_WEAPON_IDS or d[0].lower() in _CUSTOM_WEAPON_NAMES
+            if is_weapon and cid in weapon_padded and weapon_padded[cid][1] > d[1]:
+                merged.append(weapon_padded[cid])
+                seen_weapon_ids.add(cid)
+            else:
+                merged.append(d)
+                if is_weapon:
+                    seen_weapon_ids.add(cid)
+
+        for cid, d in weapon_padded.items():
+            if cid not in seen_weapon_ids:
+                merged.append(d)
+
+        return merged
 
     # ── Frame processing ──────────────────────────────────────────────────────
 
@@ -186,31 +339,24 @@ class ObjectDetector:
         Run detection on one BGR frame.
 
         Returns a (possibly empty) list of DetectionEvent objects that
-        passed the frame-count filter.  Call this for every camera frame.
+        passed the frame-count filter.
         """
         if not self._model_ready:
             return []
 
-        raw_detections: List[Tuple[str, float, Tuple]] = []
+        enhanced = self._preprocess(frame)
 
-        # Run base COCO model
-        try:
-            results = self._model(frame, conf=self.confidence, verbose=False)
-            for result in results:
-                for box in result.boxes:
-                    cls_id = int(box.cls[0])
-                    conf = float(box.conf[0])
-                    xyxyn = tuple(float(v) for v in box.xyxyn[0])
-                    cls_name = self._model.names.get(cls_id, str(cls_id))
-                    raw_detections.append((cls_name, conf, xyxyn, cls_id))
-        except Exception as e:
-            logger.warning("Base model inference error: %s", e)
+        raw_detections = self._run_inference(
+            enhanced, conf=_WEAPON_VERIFY_FLOOR, imgsz=self.imgsz,
+        )
 
-        # Run custom weapon model if available
         if self._weapon_model_ready:
             try:
                 w_results = self._weapon_model(
-                    frame, conf=self.confidence, verbose=False
+                    enhanced,
+                    conf=_WEAPON_VERIFY_FLOOR,
+                    imgsz=self.imgsz,
+                    verbose=False,
                 )
                 for result in w_results:
                     for box in result.boxes:
@@ -222,31 +368,38 @@ class ObjectDetector:
             except Exception as e:
                 logger.warning("Weapon model inference error: %s", e)
 
-        # Classify and filter
+        raw_detections = self._weapon_verify(enhanced, raw_detections)
+
+        if self._weapon_model_ready and len(raw_detections) > 1:
+            raw_detections = self._cross_model_nms(raw_detections)
+
         fired_events: List[DetectionEvent] = []
-        detected_classes = set()
+        detected_classes: set = set()
 
         for item in raw_detections:
             cls_name, conf, bbox, cls_id = item
-            category, severity = self._classify(cls_name, cls_id)
+            category, severity = self._classify(cls_name, cls_id, bbox)
             if category is None:
                 continue
+
+            min_conf = _CATEGORY_CONFIDENCE.get(category, self.confidence)
+            if conf < min_conf:
+                continue
+
+            conf = self._smooth_confidence(cls_name, conf)
 
             detected_classes.add(cls_name)
             self._frame_counts[cls_name] += 1
 
-            # Track first-seen for unattended-item detection
             if cls_name not in self._first_seen:
                 self._first_seen[cls_name] = time.time()
 
             unattended_sec = time.time() - self._first_seen[cls_name]
 
-            # Escalate unattended parcel/threat after timer
             if unattended_sec >= self.unattended_seconds:
-                if category in ("PARCEL", "OPERATIONAL") and severity in ("INFO", "LOW"):
+                if category in ("PARCEL", "OPERATIONAL", "SECURITY_THREAT") and severity in ("INFO", "LOW"):
                     severity = "MEDIUM"
 
-            # Only fire once the object has been seen for enough consecutive frames
             if self._frame_counts[cls_name] >= self.frame_threshold:
                 evt = DetectionEvent(
                     object_class=cls_name,
@@ -259,51 +412,71 @@ class ObjectDetector:
                 )
                 fired_events.append(evt)
 
-        # Reset counters for classes not seen this frame
         gone = set(self._frame_counts.keys()) - detected_classes
         for cls_name in gone:
             self._frame_counts[cls_name] = 0
             self._first_seen.pop(cls_name, None)
+            self._ema_confidence.pop(cls_name, None)
 
-        # Append to rolling log
         for evt in fired_events:
             self._append_log(evt)
 
         return fired_events
 
+    # ── Confidence smoothing ──────────────────────────────────────────────────
+
+    def _smooth_confidence(self, cls_name: str, raw_conf: float) -> float:
+        """EMA smoothing to reduce single-frame confidence spikes / dips."""
+        prev = self._ema_confidence.get(cls_name)
+        if prev is None:
+            smoothed = raw_conf
+        else:
+            smoothed = _CONFIDENCE_EMA_ALPHA * raw_conf + (1 - _CONFIDENCE_EMA_ALPHA) * prev
+        self._ema_confidence[cls_name] = smoothed
+        return round(smoothed, 4)
+
     # ── Classification ────────────────────────────────────────────────────────
 
     def _classify(
-        self, cls_name: str, cls_id: int
+        self,
+        cls_name: str,
+        cls_id: int,
+        bbox: Tuple[float, ...] = (),
     ) -> Tuple[Optional[str], Optional[str]]:
-        """Return (category, severity) or (None, None) if not security-relevant."""
+        """Return (category, severity) or (None, None) if not relevant."""
         name_lower = cls_name.lower()
 
-        # Custom weapon model outputs
         if name_lower in _CUSTOM_WEAPON_NAMES:
             return "WEAPON", "CRITICAL"
 
-        # COCO weapons (knife, scissors = critical; bat = high)
         if cls_id in _WEAPON_CLASSES:
             if cls_id == 34:
                 return "WEAPON", "HIGH"
             return "WEAPON", "CRITICAL"
 
-        # Parcels / luggage at ingress — before generic threat bucket so 24/26/28 map here
         if cls_id in _PARCEL_CLASSES:
             return "PARCEL", _CATEGORY_SEVERITY["PARCEL"]
 
-        # Other security-relevant classes (sports equipment, ambiguous props)
         if cls_id in _SECURITY_THREAT_CLASSES:
             return "SECURITY_THREAT", _CATEGORY_SEVERITY["SECURITY_THREAT"]
 
-        # Mobility aids
         if cls_id in _MOBILITY_AID_CLASSES:
             return "MOBILITY_AID", _CATEGORY_SEVERITY["MOBILITY_AID"]
 
-        # Operational hazards
         if cls_id in _OPERATIONAL_CLASSES:
-            return "OPERATIONAL", _CATEGORY_SEVERITY["OPERATIONAL"]
+            severity = _CATEGORY_SEVERITY["OPERATIONAL"]
+
+            if cls_id == 0 and len(bbox) == 4:
+                _, y1, _, y2 = bbox
+                box_height = y2 - y1
+                box_bottom = y2
+                if box_height < 0.35 and box_bottom > 0.7:
+                    severity = "MEDIUM"
+
+            if cls_id in (16, 17):
+                severity = "INFO"
+
+            return "OPERATIONAL", severity
 
         return None, None
 

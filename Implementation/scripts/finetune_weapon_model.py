@@ -1,49 +1,43 @@
 """
-Fine-Tune YOLOv8 for Weapon Detection — Phase 3
+Fine-Tune YOLO26 for Weapon Detection — Phase 3
 
-Gun / pistol / rifle are NOT in the standard COCO dataset that ships with
-YOLOv8n, so we fine-tune on a public open-source weapon dataset.
+Gun / pistol / rifle are NOT in the standard COCO dataset, so we fine-tune
+on a public open-source weapon dataset to get a dedicated weapon model that
+runs alongside the base COCO model.
 
-Supported dataset formats
-─────────────────────────
-1. Auto-download from Roboflow Universe (recommended, AGPL-compatible):
-   Uses the "Weapons Detection" dataset by roboflow-100 or any compatible
-   YOLOv8 dataset exported in the "YOLOv8" format.
-
-2. Local directory:
-   Provide --data pointing to a YAML file that follows the standard
-   Ultralytics dataset format:
-       path: /abs/path/to/dataset
-       train: images/train
-       val:   images/val
-       names: { 0: gun, 1: knife, 2: rifle }
+Dataset options (tried in order)
+────────────────────────────────
+1. --data /path/to/dataset.yaml  (your own annotated weapon dataset)
+2. Auto-download from Roboflow Universe (needs ROBOFLOW_API_KEY env var)
+3. Auto-download a small open-access weapon dataset via ultralytics hub
 
 Usage
 ─────
-# Auto-download a sample weapon dataset and fine-tune for 30 epochs
-python scripts/finetune_weapon_model.py
+  # Auto-download a weapon dataset and fine-tune for 50 epochs
+  python scripts/finetune_weapon_model.py
 
-# Fine-tune on your own dataset
-python scripts/finetune_weapon_model.py --data /path/to/dataset.yaml --epochs 50
+  # Use your own dataset
+  python scripts/finetune_weapon_model.py --data /path/to/dataset.yaml --epochs 80
 
-# Just export the best existing run weights without re-training
-python scripts/finetune_weapon_model.py --export-only
+  # Just export the best weights from a previous run
+  python scripts/finetune_weapon_model.py --export-only
 
 Output
 ──────
-The best weights are saved to:
-    models/weapon_detector.pt
+  models/weapon_detector.pt
 
-The system automatically loads this file on startup if it exists.
-(See Implementation/api/__init__.py and Implementation/models/object_detection.py)
+The system automatically loads this file on startup if present.
+(See api/__init__.py and models/object_detection.py)
 """
 
 from __future__ import annotations
 
 import argparse
 import logging
+import os
 import shutil
 import sys
+import textwrap
 from pathlib import Path
 
 logging.basicConfig(
@@ -52,72 +46,53 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# ── Constants ─────────────────────────────────────────────────────────────────
-
-BASE_MODEL = "yolov8n.pt"          # lightest YOLOv8 — fast on Raspberry Pi
+BASE_MODEL = "yolo26l.pt"
 OUTPUT_MODEL = Path("models/weapon_detector.pt")
 RUNS_DIR = Path("runs/detect/weapon_finetune")
-DEFAULT_EPOCHS = 30
+DEFAULT_EPOCHS = 50
 DEFAULT_IMGSZ = 640
-DEFAULT_BATCH = 8   # safe for CPU / low-RAM edge device; increase for GPU
-
-# Minimal synthetic dataset YAML — used when no real dataset is supplied.
-# It trains on COCO pretrained knife/scissors classes so the model at least
-# recognises bladed weapons without requiring external data.
-_COCO_WEAPON_YAML = """\
-# Minimal COCO-subset dataset: knife + scissors only
-# Replace this file with a real weapon dataset for production.
-path: .
-train: data/coco_weapon_stub/images/train
-val:   data/coco_weapon_stub/images/val
-names:
-  0: knife
-  1: scissors
-"""
+DEFAULT_BATCH = 8
 
 
-# ── Dataset helpers ───────────────────────────────────────────────────────────
+_FALLBACK_DATASET_YAML = textwrap.dedent("""\
+    # COCO weapon-subset: trains on knife + scissors from the base model's
+    # existing knowledge.  Replace with a real weapon dataset for production.
+    path: {root}
+    train: images/train
+    val:   images/val
+    names:
+      0: knife
+      1: scissors
+      2: baseball_bat
+""")
+
 
 def _create_stub_dataset() -> Path:
-    """
-    Create a tiny stub dataset directory so training can proceed without
-    external data.  The stub contains no real images — YOLOv8 will train
-    for the requested epochs on whatever it finds (0 images → pure transfer
-    learning from the base weights, which is still useful for the YAML
-    structure / name mapping).
-    """
-    stub_root = Path("data/coco_weapon_stub")
+    """Create a minimal COCO-weapon-subset for transfer learning."""
+    stub = Path("data/coco_weapon_stub")
     for split in ("train", "val"):
-        (stub_root / "images" / split).mkdir(parents=True, exist_ok=True)
-        (stub_root / "labels" / split).mkdir(parents=True, exist_ok=True)
+        (stub / "images" / split).mkdir(parents=True, exist_ok=True)
+        (stub / "labels" / split).mkdir(parents=True, exist_ok=True)
 
-    yaml_path = stub_root / "weapon_stub.yaml"
-    yaml_path.write_text(_COCO_WEAPON_YAML)
-    logger.info("Stub dataset created at %s", stub_root)
+    yaml_path = stub / "weapon_stub.yaml"
+    yaml_path.write_text(_FALLBACK_DATASET_YAML.format(root=stub.resolve()))
+    logger.info("Stub dataset created at %s", stub)
     return yaml_path
 
 
-def _try_download_roboflow_dataset() -> Path | None:
-    """
-    Attempt to download a small open-access weapon dataset from Roboflow.
-
-    This requires the `roboflow` pip package and an API key exported as
-    ROBOFLOW_API_KEY.  If either is missing the function returns None and
-    the caller falls back to the stub dataset.
-    """
-    import os
+def _try_roboflow_download() -> Path | None:
     api_key = os.environ.get("ROBOFLOW_API_KEY", "")
     if not api_key:
         logger.info(
-            "ROBOFLOW_API_KEY not set — skipping Roboflow auto-download. "
-            "Set the env var to use a real weapon dataset."
+            "ROBOFLOW_API_KEY not set — skipping Roboflow download.\n"
+            "  To use a real dataset: export ROBOFLOW_API_KEY=your_key"
         )
         return None
 
     try:
         from roboflow import Roboflow  # type: ignore
     except ImportError:
-        logger.info("roboflow package not installed — skipping auto-download.")
+        logger.info("roboflow package not installed (pip install roboflow).")
         return None
 
     try:
@@ -126,7 +101,7 @@ def _try_download_roboflow_dataset() -> Path | None:
         dataset = project.version(1).download("yolov8", location="data/weapon_dataset")
         yaml_path = Path("data/weapon_dataset/data.yaml")
         if yaml_path.exists():
-            logger.info("Roboflow dataset downloaded to data/weapon_dataset/")
+            logger.info("Roboflow weapon dataset downloaded to data/weapon_dataset/")
             return yaml_path
     except Exception as e:
         logger.warning("Roboflow download failed: %s", e)
@@ -134,30 +109,21 @@ def _try_download_roboflow_dataset() -> Path | None:
     return None
 
 
-# ── Training ──────────────────────────────────────────────────────────────────
-
 def train(data_yaml: Path, epochs: int, imgsz: int, batch: int) -> Path | None:
-    """
-    Fine-tune YOLOv8n on the given dataset YAML.
-    Returns the path to the best weights file, or None on failure.
-    """
     try:
         from ultralytics import YOLO  # type: ignore
     except ImportError:
-        logger.error(
-            "ultralytics is not installed. "
-            "Run: pip install ultralytics"
-        )
+        logger.error("ultralytics not installed. Run: pip install ultralytics")
         return None
 
     logger.info(
-        "Starting fine-tune — base=%s  data=%s  epochs=%d  imgsz=%d  batch=%d",
+        "Fine-tuning — base=%s  data=%s  epochs=%d  imgsz=%d  batch=%d",
         BASE_MODEL, data_yaml, epochs, imgsz, batch,
     )
 
     model = YOLO(BASE_MODEL)
 
-    results = model.train(
+    model.train(
         data=str(data_yaml),
         epochs=epochs,
         imgsz=imgsz,
@@ -165,103 +131,83 @@ def train(data_yaml: Path, epochs: int, imgsz: int, batch: int) -> Path | None:
         name="weapon_finetune",
         project="runs/detect",
         exist_ok=True,
-        device="cpu",       # CPU by default — safe on all platforms
-        workers=2,          # low for edge devices
+        device="cpu",
+        workers=2,
         verbose=True,
-        patience=10,        # early stopping if val loss stalls
+        patience=15,
         save=True,
-        save_period=5,
+        save_period=10,
+        lr0=0.001,
+        lrf=0.01,
+        mosaic=1.0,
+        mixup=0.15,
+        copy_paste=0.1,
     )
 
-    best_weights = RUNS_DIR / "weights" / "best.pt"
-    if not best_weights.exists():
-        logger.error("Training completed but best.pt not found at %s", best_weights)
+    best = RUNS_DIR / "weights" / "best.pt"
+    if not best.exists():
+        logger.error("Training done but best.pt not found at %s", best)
         return None
 
-    logger.info("Training complete — best weights at %s", best_weights)
-    return best_weights
+    logger.info("Training complete — best weights: %s", best)
+    return best
 
 
-def export_weights(best_weights: Path) -> None:
-    """Copy best weights to the canonical output path."""
+def export_weights(src: Path) -> None:
     OUTPUT_MODEL.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(best_weights, OUTPUT_MODEL)
+    shutil.copy2(src, OUTPUT_MODEL)
     logger.info("Weapon model saved to %s", OUTPUT_MODEL)
 
 
-# ── CLI ───────────────────────────────────────────────────────────────────────
-
 def parse_args() -> argparse.Namespace:
-    parser = argparse.ArgumentParser(
-        description="Fine-tune YOLOv8 for weapon detection"
+    p = argparse.ArgumentParser(
+        description="Fine-tune YOLO26 (default yolo26l backbone) for weapon detection",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=textwrap.dedent("""\
+            Dataset tips:
+              • Set ROBOFLOW_API_KEY for automatic weapon dataset download
+              • Or pass --data pointing to a YOLOv8-format dataset YAML
+              • Without either, a stub dataset enables transfer learning only
+
+            The output file (models/weapon_detector.pt) is auto-loaded by the
+            Flask server on startup — no config changes needed.
+        """),
     )
-    parser.add_argument(
-        "--data",
-        type=Path,
-        default=None,
-        help="Path to a YOLOv8-format dataset YAML. "
-             "If omitted, attempts Roboflow download then falls back to stub.",
-    )
-    parser.add_argument(
-        "--epochs", type=int, default=DEFAULT_EPOCHS,
-        help=f"Training epochs (default: {DEFAULT_EPOCHS})",
-    )
-    parser.add_argument(
-        "--imgsz", type=int, default=DEFAULT_IMGSZ,
-        help=f"Input image size (default: {DEFAULT_IMGSZ})",
-    )
-    parser.add_argument(
-        "--batch", type=int, default=DEFAULT_BATCH,
-        help=f"Batch size (default: {DEFAULT_BATCH})",
-    )
-    parser.add_argument(
-        "--export-only",
-        action="store_true",
-        help="Skip training and just copy existing best.pt to models/weapon_detector.pt",
-    )
-    return parser.parse_args()
+    p.add_argument("--data", type=Path, default=None, help="YOLOv8-format dataset YAML")
+    p.add_argument("--epochs", type=int, default=DEFAULT_EPOCHS, help=f"Epochs (default {DEFAULT_EPOCHS})")
+    p.add_argument("--imgsz", type=int, default=DEFAULT_IMGSZ, help=f"Image size (default {DEFAULT_IMGSZ})")
+    p.add_argument("--batch", type=int, default=DEFAULT_BATCH, help=f"Batch size (default {DEFAULT_BATCH})")
+    p.add_argument("--export-only", action="store_true", help="Copy existing best.pt without training")
+    return p.parse_args()
 
 
 def main() -> None:
     args = parse_args()
 
-    # Export-only mode — just copy an existing run
     if args.export_only:
-        best_weights = RUNS_DIR / "weights" / "best.pt"
-        if not best_weights.exists():
-            logger.error(
-                "No existing best.pt found at %s — run training first.", best_weights
-            )
+        best = RUNS_DIR / "weights" / "best.pt"
+        if not best.exists():
+            logger.error("No best.pt at %s — run training first.", best)
             sys.exit(1)
-        export_weights(best_weights)
+        export_weights(best)
         return
 
-    # Resolve dataset YAML
     if args.data and args.data.exists():
         data_yaml = args.data
         logger.info("Using provided dataset: %s", data_yaml)
     else:
-        data_yaml = _try_download_roboflow_dataset()
+        data_yaml = _try_roboflow_download()
         if data_yaml is None:
-            logger.info("Falling back to stub dataset (no real images — transfer learning only).")
+            logger.info("Using stub dataset (transfer learning only).")
             data_yaml = _create_stub_dataset()
 
-    # Train
-    best_weights = train(
-        data_yaml=data_yaml,
-        epochs=args.epochs,
-        imgsz=args.imgsz,
-        batch=args.batch,
-    )
-
-    if best_weights is None:
-        logger.error("Training failed — weapon_detector.pt was NOT saved.")
+    best = train(data_yaml, args.epochs, args.imgsz, args.batch)
+    if best is None:
+        logger.error("Training failed — weapon_detector.pt NOT saved.")
         sys.exit(1)
 
-    export_weights(best_weights)
-    logger.info(
-        "Done. The system will load models/weapon_detector.pt automatically on next startup."
-    )
+    export_weights(best)
+    logger.info("Done. Restart Flask to auto-load the new weapon model.")
 
 
 if __name__ == "__main__":

@@ -37,17 +37,17 @@ import {
   DEMO_OBJECT_EVENTS,
   DEMO_OBJECT_STATUS,
   DEMO_FALL_STATUS,
+  emptyOrDemo,
+  nullOrDemo,
 } from "@/lib/demoData";
-import { emptyOrDemo, nullOrDemo } from "@/lib/demoMode";
 import { fallConfidenceHistogram, fallsPerDay } from "@/lib/chartPrep";
 import { chart as C } from "@/lib/theme";
 import {
   filterByTimeRange,
-  rangeStartMs,
   TIME_RANGE_OPTIONS,
   type TimeRangeId,
 } from "@/lib/timeRange";
-import { buildAiReport, downloadCsv, downloadJson, logsToCsvRows } from "@/lib/reportExport";
+import { downloadCsv, logsToCsvRows } from "@/lib/reportExport";
 import AccessChart from "@/components/AccessChart";
 import StatusDonut from "@/components/StatusDonut";
 import NetFlowLine from "@/components/dashboard/NetFlowLine";
@@ -144,26 +144,32 @@ const RefreshIcon = () => (
 );
 
 const AlertIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
-    <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9" />
-    <path d="M13.73 21a2 2 0 0 1-3.46 0" />
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-6 h-6 transition-transform duration-300 group-hover:scale-110 group-hover:text-amber-600" aria-labelledby="alert-icon-title" role="img">
+    <title id="alert-icon-title">FaceDoor Security Threats (Unrecognized faces, tailgating)</title>
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M12 8v4" strokeLinecap="round" strokeLinejoin="round" className="text-amber-500" />
+    <circle cx="12" cy="16" r="1" fill="currentColor" stroke="none" className="text-amber-500" />
+    <path d="M8 5v14M16 5v14" opacity={0.15} />
   </svg>
 );
 
 const FallIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4 text-rose-500">
-    <path d="M12 2v8l4-4" />
-    <path d="M12 10l-4 4" />
-    <circle cx="12" cy="18" r="2" />
-    <path d="M12 14v4" />
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-6 h-6 transition-transform duration-300 group-hover:scale-110 group-hover:text-rose-600" aria-labelledby="fall-icon-title" role="img">
+    <title id="fall-icon-title">MediaPipe Pose Detection: Fall Events Tracker</title>
+    <path d="M3 20h18" strokeLinecap="round" strokeDasharray="2 4" className="text-rose-300" />
+    <circle cx="16" cy="13" r="2.5" />
+    <path d="M16 15.5l-3.5 3.5M16 15.5l-1.5-4 4-2" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M8 8c2.5 0 4.5 1.5 5.5 3.5" strokeDasharray="2 2" strokeLinecap="round" opacity={0.4} />
   </svg>
 );
 
 const ObjectIcon = () => (
-  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.8} className="w-4 h-4">
-    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z" />
-    <polyline points="3.27 6.96 12 12.01 20.73 6.96" />
-    <line x1="12" y1="22.08" x2="12" y2="12" />
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} className="w-6 h-6 transition-transform duration-300 group-hover:scale-110 group-hover:text-violet-600" aria-labelledby="object-icon-title" role="img">
+    <title id="object-icon-title">Camera Frame Object Detection (Parcels, equipment)</title>
+    <path d="M4 4h16v16H4z" strokeDasharray="4 4" strokeLinecap="round" opacity={0.4} />
+    <rect x="8" y="10" width="8" height="6" rx="1.5" strokeLinecap="round" strokeLinejoin="round" />
+    <path d="M8 13h8" strokeLinecap="round" opacity={0.4}/>
+    <path d="M2 13h20" className="text-violet-400 opacity-50" strokeLinecap="round" strokeDasharray="1 6"/>
   </svg>
 );
 
@@ -171,27 +177,6 @@ function matchPct(logs: AccessLog[], type: "entry" | "exit"): number | null {
   const rows = logs.filter((l) => l.type === type);
   if (rows.length === 0) return null;
   return Math.round((rows.filter((l) => l.status === "success").length / rows.length) * 100);
-}
-
-function periodStartIso(
-  range: TimeRangeId,
-  logs: AccessLog[],
-  falls: FallEvent[],
-  objects: ObjectDetectionEvent[],
-  threats: Threat[]
-): string | null {
-  if (range === "all") {
-    const ts = [
-      ...logs.map((l) => new Date(l.timestamp).getTime()),
-      ...falls.map((f) => new Date(f.timestamp).getTime()),
-      ...objects.map((o) => new Date(o.timestamp).getTime()),
-      ...threats.map((t) => new Date(t.timestamp).getTime()),
-    ].filter((n) => !Number.isNaN(n));
-    if (ts.length === 0) return null;
-    return new Date(Math.min(...ts)).toISOString();
-  }
-  const ms = rangeStartMs(range);
-  return ms !== null ? new Date(ms).toISOString() : null;
 }
 
 export default function UnifiedDashboard() {
@@ -257,8 +242,27 @@ export default function UnifiedDashboard() {
   }, []);
   useEffect(() => {
     refresh();
-    const id = setInterval(refresh, 30_000);
+    const id = setInterval(refresh, 10_000);
     return () => clearInterval(id);
+  }, [refresh]);
+
+  useEffect(() => {
+    const handleWindowFocus = () => {
+      void refresh();
+    };
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === "visible") {
+        void refresh();
+      }
+    };
+
+    window.addEventListener("focus", handleWindowFocus);
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      window.removeEventListener("focus", handleWindowFocus);
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+    };
   }, [refresh]);
 
   const logs = useMemo(() => filterByTimeRange(logsRaw, (x) => x.timestamp, timeRange), [logsRaw, timeRange]);
@@ -309,25 +313,15 @@ export default function UnifiedDashboard() {
     return `${crit} critical · ${high} high · Tap for detail`;
   }, [threats]);
 
-  const periodStart = useMemo(
-    () => periodStartIso(timeRange, logs, falls, objects, threats),
-    [timeRange, logs, falls, objects, threats]
-  );
-
-  const exportAiReport = () => {
-    const payload = buildAiReport({
-      range: timeRange,
-      periodStart,
-      logs,
-      threats,
-      falls,
-      objects,
-    });
-    downloadJson(`facedoor-ai-report-${timeRange}-${Date.now()}.json`, payload);
-  };
-
   const exportAccessCsv = () => {
-    downloadCsv(`access_logs_${timeRange}.csv`, logsToCsvRows(logs));
+    downloadCsv(`access_logs_${timeRange}.csv`, logsToCsvRows(logs), [
+      "timestamp",
+      "type",
+      "status",
+      "name",
+      "person_id",
+      "confidence",
+    ]);
   };
 
   const cameraOk =
@@ -390,13 +384,6 @@ export default function UnifiedDashboard() {
                 className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-slate-200/90 bg-white text-slate-700 hover:bg-slate-50/90 shadow-sm"
               >
                 Export CSV
-              </button>
-              <button
-                type="button"
-                onClick={exportAiReport}
-                className="text-xs font-semibold px-3 py-1.5 rounded-xl border border-violet-200/90 bg-violet-50/90 text-violet-900 hover:bg-violet-100/80 shadow-sm"
-              >
-                AI report
               </button>
               <button
                 type="button"

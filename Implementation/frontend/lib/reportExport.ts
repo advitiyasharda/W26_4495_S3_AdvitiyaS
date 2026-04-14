@@ -1,4 +1,4 @@
-import type { AccessLog, FallEvent, ObjectDetectionEvent, Threat } from "./api";
+import type { AccessLog, AuditEntry, FallEvent, ObjectDetectionEvent, Threat } from "./api";
 import type { TimeRangeId } from "./timeRange";
 import { rangeLabelForExport } from "./timeRange";
 
@@ -135,9 +135,22 @@ export function downloadJson(filename: string, data: unknown) {
   URL.revokeObjectURL(url);
 }
 
-export function downloadCsv(filename: string, rows: Record<string, string | number | null>[]) {
-  if (rows.length === 0) return;
-  const headers = Object.keys(rows[0]);
+export function downloadCsv(
+  filename: string,
+  rows: Record<string, string | number | null>[],
+  fallbackHeaders: string[] = []
+) {
+  const headers = rows.length > 0 ? Object.keys(rows[0]) : fallbackHeaders;
+  if (headers.length === 0) {
+    const blob = new Blob(["message\nNo rows available for this export"], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = filename;
+    a.click();
+    URL.revokeObjectURL(url);
+    return;
+  }
   const esc = (v: string | number | null) => {
     const s = v === null || v === undefined ? "" : String(v);
     if (/[",\n]/.test(s)) return `"${s.replace(/"/g, '""')}"`;
@@ -162,4 +175,64 @@ export function logsToCsvRows(logs: AccessLog[]) {
     person_id: l.person_id ?? "",
     confidence: l.confidence,
   }));
+}
+
+const AUDIT_CSV_HEADERS = ["timestamp", "action", "user", "resource", "result"] as const;
+
+export function auditEntriesToCsvRows(entries: AuditEntry[]): Record<string, string | number | null>[] {
+  return entries.map((e) => ({
+    timestamp: e.timestamp,
+    action: e.action,
+    user: e.user ?? "",
+    resource: e.resource ?? "",
+    result: e.result,
+  }));
+}
+
+/** POST/GET CSV from API; if proxy/backend fails or returns JSON, export rows from the current table (incl. demo). */
+export async function exportAuditTrailCsv(apiCsvUrl: string, entries: AuditEntry[]): Promise<void> {
+  const fallback = () => {
+    downloadCsv(
+      `audit_trail_${Date.now()}.csv`,
+      auditEntriesToCsvRows(entries),
+      [...AUDIT_CSV_HEADERS]
+    );
+  };
+
+  try {
+    const res = await fetch(apiCsvUrl, { method: "GET", cache: "no-store" });
+    const text = await res.text();
+    const ct = (res.headers.get("content-type") || "").toLowerCase();
+    const first = text.trimStart();
+    const looksLikeCsv =
+      first.startsWith("timestamp,") ||
+      (first.includes(",") && first.split("\n")[0]?.toLowerCase().includes("timestamp"));
+
+    if (
+      res.ok &&
+      (ct.includes("text/csv") || ct.includes("application/csv") || ct.includes("text/plain") || looksLikeCsv) &&
+      !first.trimStart().startsWith("{")
+    ) {
+      const blob = new Blob(["\ufeff", text], { type: "text/csv;charset=utf-8" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      const cd = res.headers.get("content-disposition");
+      let name = `audit_log_${Date.now()}.csv`;
+      if (cd) {
+        const utf8 = /filename\*=UTF-8''([^;]+)/i.exec(cd);
+        const simple = /filename="?([^";\n]+)"?/i.exec(cd);
+        if (utf8?.[1]) name = decodeURIComponent(utf8[1].trim());
+        else if (simple?.[1]) name = simple[1].trim();
+      }
+      a.download = name;
+      a.click();
+      URL.revokeObjectURL(url);
+      return;
+    }
+  } catch {
+    /* use fallback */
+  }
+
+  fallback();
 }

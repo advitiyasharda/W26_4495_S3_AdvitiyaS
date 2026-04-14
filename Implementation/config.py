@@ -58,17 +58,22 @@ FALL_VELOCITY_WINDOW = int(os.environ.get("FALL_VELOCITY_WINDOW", "8"))
 # Cooldown used by LSTM detector (rules detector has built-in cooldown)
 FALL_COOLDOWN_FRAMES = int(os.environ.get("FALL_COOLDOWN_FRAMES", "30"))
 
-# Object Detection Configuration (Phase 3 — YOLOv8)
-# Minimum YOLO confidence to surface a detection
-OBJECT_DETECTION_CONFIDENCE = float(os.environ.get("OBJECT_DETECTION_CONFIDENCE", "0.45"))
-# How many consecutive frames an object must appear before triggering an alert (reduces false positives)
+# Object Detection Configuration (Phase 3 — YOLO26)
+# Floor confidence sent to YOLO; per-category thresholds in the detector raise
+# the effective bar for noisy categories while keeping it low for weapons.
+OBJECT_DETECTION_CONFIDENCE = float(os.environ.get("OBJECT_DETECTION_CONFIDENCE", "0.20"))
+# Consecutive frames an object must appear before triggering an alert
 OBJECT_DETECTION_FRAME_THRESHOLD = int(os.environ.get("OBJECT_DETECTION_FRAME_THRESHOLD", "3"))
 # Minutes an item must remain unattended before raising a MEDIUM threat
 OBJECT_UNATTENDED_MINUTES = float(os.environ.get("OBJECT_UNATTENDED_MINUTES", "2.0"))
-# Path to a custom fine-tuned weapon model; falls back to YOLOv8n if missing
+# Path to a custom fine-tuned weapon model; falls back gracefully if missing
 OBJECT_WEAPON_MODEL_PATH = os.environ.get(
     "OBJECT_WEAPON_MODEL_PATH",
     os.path.join(os.path.dirname(__file__), "models", "weapon_detector.pt"),
 )
-# Base YOLOv8 model used when the custom weapon model is absent
-OBJECT_BASE_MODEL = os.environ.get("OBJECT_BASE_MODEL", "yolov8n.pt")
+# Base model — YOLO26 Large (higher mAP than medium; heavier). Override with OBJECT_BASE_MODEL.
+OBJECT_BASE_MODEL = os.environ.get("OBJECT_BASE_MODEL", "yolo26l.pt")
+# Inference image size (px); 640 is the sweet spot for real-time + accuracy
+OBJECT_IMGSZ = int(os.environ.get("OBJECT_IMGSZ", "640"))
+# CLAHE preprocessing for backlit / shadowed doorway scenes
+OBJECT_ENABLE_PREPROCESSING = os.environ.get("OBJECT_ENABLE_PREPROCESSING", "1") == "1"

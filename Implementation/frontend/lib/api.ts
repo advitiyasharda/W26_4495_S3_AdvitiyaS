@@ -196,3 +196,38 @@ export const getObjectEvents = (limit = 50, category?: string, severity?: string
 
 export const getObjectStatus = () =>
   fetchAPI<ObjectStatusResponse>("/objects/status");
+
+// ─── Demo Interfaces ─────────────────────────────────────────────────────────
+
+export interface DemoToolStatus {
+  id: string;
+  label: string;
+  kind: string;
+  command: string;
+  running: boolean;
+  pid: number | null;
+}
+
+export interface DemoToolsResponse {
+  tools: DemoToolStatus[];
+  timestamp: string;
+}
+
+export const getDemoTools = () =>
+  fetchAPI<DemoToolsResponse>("/demo/tools");
+
+export const startDemoTool = (toolId: string) =>
+  fetchAPI<{ status: string; tool_id: string; pid?: number }>(`/demo/tools/${encodeURIComponent(toolId)}/start`, {
+    method: "POST",
+  });
+
+export const startDemoToolWithPayload = (toolId: string, payload: Record<string, unknown>) =>
+  fetchAPI<{ status: string; tool_id: string; pid?: number }>(`/demo/tools/${encodeURIComponent(toolId)}/start`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+
+export const stopDemoTool = (toolId: string) =>
+  fetchAPI<{ status: string; tool_id: string }>(`/demo/tools/${encodeURIComponent(toolId)}/stop`, {
+    method: "POST",
+  });

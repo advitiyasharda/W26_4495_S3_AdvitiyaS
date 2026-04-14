@@ -11,6 +11,31 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 
 import cv2
 import os
+import argparse
+
+
+def _reload_backend_recognizer(api_url: str) -> bool:
+    """Reload backend in-memory face encodings after registration."""
+    base = (api_url or "").strip().rstrip("/")
+    if not base:
+        return False
+    try:
+        import requests
+    except Exception:
+        print("  [WARN] requests not installed; skipping backend recognizer reload")
+        return False
+
+    try:
+        resp = requests.post(f"{base}/api/recognition/reload", timeout=10)
+        if not resp.ok:
+            print(f"  [WARN] Backend reload failed ({resp.status_code}): {resp.text[:160]}")
+            return False
+        payload = resp.json() if resp.content else {}
+        print(f"  [OK] Backend recognizer reloaded ({payload.get('loaded_encodings', 'unknown')} encodings)")
+        return True
+    except Exception as e:
+        print(f"  [WARN] Could not reload backend recognizer: {e}")
+        return False
 
 def capture_face_images(person_name, num_photos=10):
     """
@@ -120,16 +145,32 @@ def main():
     print("\n" + "=" * 60)
     print("DOOR FACE PANELS - FACE CAPTURE UTILITY")
     print("=" * 60)
-    
-    # Get input from user
+
+    parser = argparse.ArgumentParser(description="Capture face photos from webcam")
+    parser.add_argument("--person", type=str, default=None, help="Person folder name (e.g. john_doe)")
+    parser.add_argument("--photos", type=int, default=None, help="Number of photos to capture")
+    parser.add_argument("--register-now", action="store_true", help="Register captured photos in DB immediately")
+    parser.add_argument("--person-id", type=str, default=None, help="Person ID for DB registration")
+    parser.add_argument("--display-name", type=str, default=None, help="Display name for DB registration")
+    parser.add_argument("--role", type=str, default=None, help="Role for DB registration (resident/caregiver)")
+    parser.add_argument("--reload-api-url", type=str, default=None, help="Backend API base URL for face reload")
+    args = parser.parse_args()
+
+    # Get input from user (or CLI args for non-interactive launchers)
     try:
-        person_name = input("\nEnter person name (e.g., 'john_doe'): ").strip()
+        person_name = (args.person or "").strip()
+        if not person_name:
+            person_name = input("\nEnter person name (e.g., 'john_doe'): ").strip()
         if not person_name:
             print("ERROR: Name cannot be empty")
             return
-        
-        num_input = input("How many photos to capture? (10-20 recommended): ").strip()
-        num_photos = int(num_input)
+
+        if args.photos is not None:
+            num_photos = int(args.photos)
+            print(f"Using --photos={num_photos}")
+        else:
+            num_input = input("How many photos to capture? (10-20 recommended): ").strip()
+            num_photos = int(num_input)
         
         if num_photos < 1:
             print("ERROR: Must capture at least 1 photo")
@@ -143,9 +184,21 @@ def main():
         
         if success:
             # Ask if user wants to register now
-            register_now = input("\nRegister these photos in the system now? (y/n): ").strip().lower()
+            if args.register_now:
+                register_now = "y"
+            elif args.person is not None:
+                # Non-interactive run from launcher defaults to no immediate DB registration.
+                register_now = "n"
+            else:
+                register_now = input("\nRegister these photos in the system now? (y/n): ").strip().lower()
             if register_now == 'y':
-                register_captured_person(person_name)
+                register_captured_person(
+                    person_name,
+                    person_id=args.person_id,
+                    role=args.role,
+                    display_name=args.display_name,
+                    reload_api_url=args.reload_api_url,
+                )
     
     except ValueError:
         print("ERROR: Invalid number entered")
@@ -154,7 +207,7 @@ def main():
     except Exception as e:
         print(f"ERROR: {e}")
 
-def register_captured_person(person_name):
+def register_captured_person(person_name, person_id=None, role=None, display_name=None, reload_api_url=None):
     """Register the captured person in the system"""
     from data.database import Database
     from api.facial_recognition import FacialRecognitionEngine
@@ -165,8 +218,12 @@ def register_captured_person(person_name):
     
     try:
         # Get person details
-        person_id = input(f"\nEnter person ID (e.g., 'resident_001'): ").strip()
-        role = input("Enter role (resident/caregiver): ").strip().lower()
+        if not person_id:
+            person_id = input(f"\nEnter person ID (e.g., 'resident_001'): ").strip()
+        role = (role or "").strip().lower()
+        if not role:
+            role = input("Enter role (resident/caregiver): ").strip().lower()
+        display_name = (display_name or "").strip() or person_name.replace('_', ' ').title()
         
         if role not in ['resident', 'caregiver']:
             role = 'resident'
@@ -175,7 +232,7 @@ def register_captured_person(person_name):
         db = Database()
         engine = FacialRecognitionEngine()
         
-        if not db.add_user(person_id, person_name.replace('_', ' ').title(), role):
+        if not db.add_user(person_id, display_name, role, display_id=person_id):
             print(f"  [FAIL] Could not add to database (database may be locked).")
             print(f"     Stop the Flask server (Ctrl+C in its terminal) and run:")
             print(f"     python3 scripts/register_faces.py  → option 2 to register from photos")
@@ -199,7 +256,7 @@ def register_captured_person(person_name):
             face_roi = frame[y:y+h, x:x+w]
             encoding = engine._extract_face_features(face_roi)
             if encoding is not None:
-                engine.register_face(person_id, person_name, encoding)
+                engine.register_face(person_id, display_name, encoding)
                 encodings_registered += 1
         
         if encodings_registered == 0:
@@ -213,9 +270,10 @@ def register_captured_person(person_name):
         print("[OK] REGISTRATION COMPLETE")
         print("=" * 60)
         print(f"  Person ID: {person_id}")
-        print(f"  Name: {person_name.replace('_', ' ').title()}")
+        print(f"  Name: {display_name}")
         print(f"  Role: {role}")
         print(f"  Encodings: {encodings_registered}/{len(photos)} photos")
+        _reload_backend_recognizer(reload_api_url)
         
     except Exception as e:
         print(f"ERROR during registration: {e}")

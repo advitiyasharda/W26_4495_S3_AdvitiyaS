@@ -2,8 +2,7 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { getFallEvents, getFallStatus, resetFallDetector, FallEvent, FallStatusResponse } from "@/lib/api";
-import { DEMO_FALL_EVENTS, DEMO_FALL_STATUS } from "@/lib/demoData";
-import { demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoMode";
+import { DEMO_FALL_EVENTS, DEMO_FALL_STATUS, demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoData";
 import PageHero from "@/components/PageHero";
 import { IconCalmCheck, IconCameraDoor, IconFallMotion } from "@/components/icons/DoorIcons";
 import { fallConfidenceHistogram, fallsPerDay } from "@/lib/chartPrep";

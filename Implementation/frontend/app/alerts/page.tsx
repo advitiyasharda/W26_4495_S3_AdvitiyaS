@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { getThreats, Threat } from "@/lib/api";
 import { DEMO_THREATS, demoFallbackEnabled, emptyOrDemo } from "@/lib/demoData";
+import { downloadCsv, threatsToCsvRows } from "@/lib/reportExport";
 import AlertList from "@/components/AlertList";
 import PageHero from "@/components/PageHero";
 import AlertSeveritySummary from "@/components/alerts/AlertSeveritySummary";
-import { IconShieldAlert } from "@/components/icons/DoorIcons";
+import { IconDownload, IconShieldAlert } from "@/components/icons/DoorIcons";
 
 type Filter = "ALL" | "HIGH" | "CRITICAL";
 
@@ -90,6 +91,20 @@ export default function AlertsPage() {
             >
               {badge}
             </span>
+            <button
+              type="button"
+              onClick={() =>
+                downloadCsv(
+                  `alerts_${filter.toLowerCase()}_${Date.now()}.csv`,
+                  threatsToCsvRows(threats),
+                  ["timestamp", "severity", "threat_type", "message"]
+                )
+              }
+              className="inline-flex items-center gap-2 bg-white/95 border border-amber-200/80 text-amber-900 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-amber-50/80 transition-colors shadow-sm"
+            >
+              <IconDownload className="w-4 h-4" />
+              Export CSV
+            </button>
           </div>
         }
       />

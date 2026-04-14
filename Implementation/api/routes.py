@@ -50,7 +50,16 @@ DEMO_TOOLS = {
     },
     "object-test": {
         "label": "Object detection interface",
-        "command": ["python3", "scripts/test_object_detection_camera_live.py", "--base-model", "yolo26l.pt"],
+        "command": [
+            "python3",
+            "scripts/test_object_detection_camera_live.py",
+            "--base-model",
+            "yolo26l.pt",
+            "--post-api-url",
+            "http://127.0.0.1:5001",
+            "--api-every",
+            "3",
+        ],
         "kind": "camera",
     },
 }

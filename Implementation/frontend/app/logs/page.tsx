@@ -3,10 +3,11 @@
 import { useEffect, useMemo, useState } from "react";
 import { getAccessLogs, getUsers, deleteUser, AccessLog, User } from "@/lib/api";
 import { DEMO_LOGS, DEMO_USERS, emptyOrDemo } from "@/lib/demoData";
+import { downloadCsv, logsToCsvRows } from "@/lib/reportExport";
 import AccessLogsTable from "@/components/AccessLogsTable";
 import PageHero from "@/components/PageHero";
 import LogsDoorSummary from "@/components/logs/LogsDoorSummary";
-import { IconClipboard, IconDoorPanel } from "@/components/icons/DoorIcons";
+import { IconClipboard, IconDoorPanel, IconDownload } from "@/components/icons/DoorIcons";
 
 function enrolledRoleLabel(role: string | undefined): string {
   const r = (role ?? "resident").trim().toLowerCase();
@@ -113,6 +114,20 @@ export default function LogsPage() {
             <span className="bg-white/95 text-slate-700 text-sm font-medium px-3 py-1.5 rounded-full border border-slate-200/80">
               {displayed.length} in view
             </span>
+            <button
+              type="button"
+              onClick={() =>
+                downloadCsv(
+                  `access_logs_${Date.now()}.csv`,
+                  logsToCsvRows(displayed),
+                  ["timestamp", "type", "status", "name", "person_id", "confidence"]
+                )
+              }
+              className="inline-flex items-center gap-2 bg-white/95 border border-teal-200/80 text-teal-900 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-teal-50/80 transition-colors shadow-sm"
+            >
+              <IconDownload className="w-4 h-4" />
+              Export CSV
+            </button>
           </div>
         }
       />

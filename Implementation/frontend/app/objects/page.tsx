@@ -28,6 +28,8 @@ import { ObjectCategoryIcon } from "@/components/icons/ObjectCategoryIcons";
 import PageHero from "@/components/PageHero";
 import { IconObjectFrame } from "@/components/icons/DoorIcons";
 import { DEMO_OBJECT_EVENTS, DEMO_OBJECT_STATUS, demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoData";
+import { downloadCsv, objectEventsToCsvRows } from "@/lib/reportExport";
+import { IconDownload } from "@/components/icons/DoorIcons";
 
 function fmtTime(iso: string) {
   return new Date(iso).toLocaleString("en-US", {
@@ -150,6 +152,20 @@ export default function ObjectsPage() {
               className="text-sm font-semibold px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm"
             >
               Refresh
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                downloadCsv(
+                  `object_events_${Date.now()}.csv`,
+                  objectEventsToCsvRows(filtered),
+                  ["timestamp", "object_class", "category", "severity", "confidence", "unattended_seconds", "frame_count"]
+                )
+              }
+              className="inline-flex items-center gap-2 bg-white/95 border border-violet-200/80 text-violet-900 text-sm font-semibold px-4 py-2 rounded-xl hover:bg-violet-50/80 transition-colors shadow-sm"
+            >
+              <IconDownload className="w-4 h-4" />
+              Export CSV
             </button>
           </div>
         }

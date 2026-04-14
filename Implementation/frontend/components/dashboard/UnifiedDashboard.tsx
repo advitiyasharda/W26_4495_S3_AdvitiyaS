@@ -18,27 +18,20 @@ import {
   getStats,
   getAccessLogs,
   getFallEvents,
-  getFallStatus,
   getObjectEvents,
-  getObjectStatus,
   getThreats,
   type StatsResponse,
   type AccessLog,
   type FallEvent,
   type ObjectDetectionEvent,
   type Threat,
-  type FallStatusResponse,
-  type ObjectStatusResponse,
 } from "@/lib/api";
 import {
   DEMO_LOGS,
   DEMO_THREATS,
   DEMO_FALL_EVENTS,
   DEMO_OBJECT_EVENTS,
-  DEMO_OBJECT_STATUS,
-  DEMO_FALL_STATUS,
   emptyOrDemo,
-  nullOrDemo,
 } from "@/lib/demoData";
 import { fallConfidenceHistogram, fallsPerDay } from "@/lib/chartPrep";
 import { chart as C } from "@/lib/theme";
@@ -186,22 +179,18 @@ export default function UnifiedDashboard() {
   const [fallsRaw, setFallsRaw] = useState<FallEvent[]>([]);
   const [objectsRaw, setObjectsRaw] = useState<ObjectDetectionEvent[]>([]);
   const [threatsRaw, setThreatsRaw] = useState<Threat[]>([]);
-  const [fallStatus, setFallStatus] = useState<FallStatusResponse | null>(null);
-  const [objectStatus, setObjectStatus] = useState<ObjectStatusResponse | null>(null);
   const [usingDemo, setUsingDemo] = useState(false);
   const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const [mounted, setMounted] = useState(false);
   const [insight, setInsight] = useState<InsightId | null>(null);
 
   const refresh = useCallback(async () => {
-    const [s, l, fallData, objData, thData, fs, os] = await Promise.all([
+    const [s, l, fallData, objData, thData] = await Promise.all([
       getStats(),
       getAccessLogs(280),
       getFallEvents(150),
       getObjectEvents(150),
       getThreats(),
-      getFallStatus(),
-      getObjectStatus(),
     ]);
 
     const hasRealPeople = l?.logs.some((log) => log.person_id != null && log.name != null);
@@ -232,8 +221,6 @@ export default function UnifiedDashboard() {
     const apiT = thData?.threats ?? [];
     setThreatsRaw(emptyOrDemo(apiT, DEMO_THREATS));
 
-    setFallStatus(nullOrDemo(fs, DEMO_FALL_STATUS));
-    setObjectStatus(nullOrDemo(os, DEMO_OBJECT_STATUS));
     setLastRefresh(new Date());
   }, []);
 
@@ -323,9 +310,6 @@ export default function UnifiedDashboard() {
       "confidence",
     ]);
   };
-
-  const cameraOk =
-    (fallStatus?.detector_ready ?? false) || (objectStatus?.detector_ready ?? false) || stats != null;
 
   const scrollToSection = useCallback((s: DashboardScrollSection) => {
     const el = document.getElementById(`section-${s}`);
@@ -440,39 +424,6 @@ export default function UnifiedDashboard() {
           onClick={() => setInsight("objects")}
         />
       </div>
-
-      <OpsSection
-        accent="slate"
-        kicker="Pipelines"
-        title="Detector & camera status"
-        description="Quick read on whether vision stacks report ready. Does not replace detailed settings on each product page."
-        sectionId="pipelines"
-        action={
-          <>
-            {sectionLink("/objects", "Object settings", "text-violet-700")}
-            {sectionLink("/falls", "Fall settings", "text-rose-700")}
-          </>
-        }
-      >
-        <div className="flex flex-wrap gap-6 text-sm text-slate-700">
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Fall detector</p>
-            <p className="mt-1 font-semibold tabular-nums">
-              {fallStatus?.detector_ready ? "Ready" : "Off / degraded"}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Object detector</p>
-            <p className="mt-1 font-semibold tabular-nums">
-              {objectStatus?.detector_ready ? "Ready" : "Off / degraded"}
-            </p>
-          </div>
-          <div>
-            <p className="text-[11px] font-medium uppercase tracking-wide text-slate-400">Data link</p>
-            <p className="mt-1 font-semibold tabular-nums">{cameraOk ? "Active" : "Limited"}</p>
-          </div>
-        </div>
-      </OpsSection>
 
       <OpsSection
         accent="teal"

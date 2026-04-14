@@ -3,8 +3,9 @@
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { getFallEvents, getFallStatus, resetFallDetector, FallEvent, FallStatusResponse } from "@/lib/api";
 import { DEMO_FALL_EVENTS, DEMO_FALL_STATUS, demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoData";
+import { downloadCsv, fallEventsToCsvRows } from "@/lib/reportExport";
 import PageHero from "@/components/PageHero";
-import { IconCalmCheck, IconCameraDoor, IconFallMotion } from "@/components/icons/DoorIcons";
+import { IconCalmCheck, IconCameraDoor, IconDownload, IconFallMotion } from "@/components/icons/DoorIcons";
 import { fallConfidenceHistogram, fallsPerDay } from "@/lib/chartPrep";
 import { chart as C } from "@/lib/theme";
 import {
@@ -119,6 +120,20 @@ export default function FallsPage() {
               className="bg-white text-rose-700 text-sm font-semibold px-4 py-2 rounded-xl border border-rose-200/80 hover:bg-rose-50/90 transition-colors shadow-sm"
             >
               Reset detector
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                downloadCsv(
+                  `fall_events_${Date.now()}.csv`,
+                  fallEventsToCsvRows(events),
+                  ["timestamp", "anomaly_id", "anomaly_type", "anomaly_score", "user_id", "description"]
+                )
+              }
+              className="inline-flex items-center gap-2 bg-white text-rose-700 text-sm font-semibold px-4 py-2 rounded-xl border border-rose-200/80 hover:bg-rose-50/90 transition-colors shadow-sm"
+            >
+              <IconDownload className="w-4 h-4" />
+              Export CSV
             </button>
           </div>
         }

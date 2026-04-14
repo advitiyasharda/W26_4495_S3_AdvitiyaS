@@ -35,10 +35,14 @@ Keys while running:
 from __future__ import annotations
 
 import argparse
+import base64
 import datetime as dt
 import glob
+import json
 import sys
 import time
+import urllib.error
+import urllib.request
 from pathlib import Path
 from typing import List, Tuple
 
@@ -84,9 +88,44 @@ def parse_args() -> argparse.Namespace:
     p.add_argument("--unattended-minutes", type=float, default=2.0, help="Unattended escalation timer")
     p.add_argument("--base-model", default="yolo26l.pt", help="Base YOLO model (default yolo26l.pt)")
     p.add_argument("--weapon-model", default="models/weapon_detector.pt", help="Weapon model path")
+    p.add_argument(
+        "--post-api-url",
+        default="",
+        help="Optional Flask base URL; if set, periodically POST frames to /api/objects/detect",
+    )
+    p.add_argument(
+        "--api-every",
+        type=int,
+        default=3,
+        help="POST one frame every N frames when --post-api-url is set (default 3)",
+    )
     p.add_argument("--width", type=int, default=1100, help="Window width")
     p.add_argument("--height", type=int, default=640, help="Window height")
     return p.parse_args()
+
+
+def post_frame_to_api(frame: np.ndarray, api_base: str, timeout_s: float = 0.8) -> bool:
+    """Send one JPEG frame to Flask /api/objects/detect; best-effort only."""
+    if not api_base:
+        return False
+    ok, buf = cv2.imencode(".jpg", frame, [int(cv2.IMWRITE_JPEG_QUALITY), 85])
+    if not ok:
+        return False
+
+    payload = {"frame": base64.b64encode(buf).decode("ascii")}
+    body = json.dumps(payload).encode("utf-8")
+    url = api_base.rstrip("/") + "/api/objects/detect"
+    req = urllib.request.Request(
+        url,
+        data=body,
+        headers={"Content-Type": "application/json"},
+        method="POST",
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=timeout_s) as resp:
+            return 200 <= resp.status < 300
+    except (urllib.error.URLError, urllib.error.HTTPError, TimeoutError):
+        return False
 
 
 class FrameSource:
@@ -304,6 +343,11 @@ def main() -> None:
     source = FrameSource(args)
     print(f"Source: {source.label}")
     print("Press H for keyboard shortcuts\n")
+    if args.post_api_url:
+        print(
+            f"API relay enabled: posting every {max(1, args.api_every)} frame(s) "
+            f"to {args.post_api_url.rstrip('/')}/api/objects/detect"
+        )
 
     show_help = False
     paused = False
@@ -328,6 +372,8 @@ def main() -> None:
 
             events = detector.process_frame(frame)
             frame_count += 1
+            if args.post_api_url and frame_count % max(1, args.api_every) == 0:
+                post_frame_to_api(frame, args.post_api_url)
 
             elapsed = time.time() - t_start
             fps_val = frame_count / elapsed if elapsed > 0 else 0.0

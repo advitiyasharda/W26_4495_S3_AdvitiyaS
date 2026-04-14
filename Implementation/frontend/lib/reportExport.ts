@@ -177,6 +177,38 @@ export function logsToCsvRows(logs: AccessLog[]) {
   }));
 }
 
+export function threatsToCsvRows(threats: Threat[]) {
+  return threats.map((t) => ({
+    timestamp: t.timestamp,
+    severity: t.severity,
+    threat_type: t.threat_type,
+    message: t.message,
+  }));
+}
+
+export function fallEventsToCsvRows(events: FallEvent[]) {
+  return events.map((e) => ({
+    timestamp: e.timestamp,
+    anomaly_id: e.anomaly_id,
+    anomaly_type: e.anomaly_type,
+    anomaly_score: e.anomaly_score,
+    user_id: e.user_id,
+    description: e.description,
+  }));
+}
+
+export function objectEventsToCsvRows(events: ObjectDetectionEvent[]) {
+  return events.map((e) => ({
+    timestamp: e.timestamp,
+    object_class: e.object_class,
+    category: e.category,
+    severity: e.severity,
+    confidence: e.confidence,
+    unattended_seconds: e.unattended_seconds,
+    frame_count: e.frame_count,
+  }));
+}
+
 const AUDIT_CSV_HEADERS = ["timestamp", "action", "user", "resource", "result"] as const;
 
 export function auditEntriesToCsvRows(entries: AuditEntry[]): Record<string, string | number | null>[] {

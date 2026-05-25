@@ -33,6 +33,7 @@ import {
   DEMO_OBJECT_EVENTS,
   emptyOrDemo,
 } from "@/lib/demoData";
+import { useDemoMode } from "@/lib/useDemoMode";
 import { fallConfidenceHistogram, fallsPerDay } from "@/lib/chartPrep";
 import { chart as C } from "@/lib/theme";
 import {
@@ -173,6 +174,7 @@ function matchPct(logs: AccessLog[], type: "entry" | "exit"): number | null {
 }
 
 export default function UnifiedDashboard() {
+  const { demoEnabled } = useDemoMode();
   const [timeRange, setTimeRange] = useState<TimeRangeId>("7d");
   const [stats, setStats] = useState<StatsResponse | null>(null);
   const [logsRaw, setLogsRaw] = useState<AccessLog[]>([]);
@@ -184,7 +186,7 @@ export default function UnifiedDashboard() {
   const [mounted, setMounted] = useState(false);
   const [insight, setInsight] = useState<InsightId | null>(null);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (demo: boolean) => {
     const [s, l, fallData, objData, thData] = await Promise.all([
       getStats(),
       getAccessLogs(280),
@@ -197,13 +199,16 @@ export default function UnifiedDashboard() {
     if (hasRealPeople) {
       setLogsRaw(l!.logs);
       setUsingDemo(false);
-    } else {
+    } else if (demo) {
       setLogsRaw(DEMO_LOGS);
       setUsingDemo(true);
+    } else {
+      setLogsRaw([]);
+      setUsingDemo(false);
     }
 
     if (s) setStats(s);
-    else {
+    else if (demo) {
       const entries = DEMO_LOGS.filter((x) => x.type === "entry").length;
       const exits = DEMO_LOGS.filter((x) => x.type === "exit").length;
       setStats({
@@ -212,15 +217,9 @@ export default function UnifiedDashboard() {
       });
     }
 
-    const apiFalls = fallData?.events ?? [];
-    setFallsRaw(emptyOrDemo(apiFalls, DEMO_FALL_EVENTS));
-
-    const apiO = objData?.events ?? [];
-    setObjectsRaw(emptyOrDemo(apiO, DEMO_OBJECT_EVENTS));
-
-    const apiT = thData?.threats ?? [];
-    setThreatsRaw(emptyOrDemo(apiT, DEMO_THREATS));
-
+    setFallsRaw(emptyOrDemo(fallData?.events ?? [], DEMO_FALL_EVENTS, demo));
+    setObjectsRaw(emptyOrDemo(objData?.events ?? [], DEMO_OBJECT_EVENTS, demo));
+    setThreatsRaw(emptyOrDemo(thData?.threats ?? [], DEMO_THREATS, demo));
     setLastRefresh(new Date());
   }, []);
 
@@ -228,18 +227,19 @@ export default function UnifiedDashboard() {
     setMounted(true);
   }, []);
   useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 10_000);
+    refresh(demoEnabled);
+    const id = setInterval(() => refresh(demoEnabled), 10_000);
     return () => clearInterval(id);
-  }, [refresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh, demoEnabled]);
 
   useEffect(() => {
     const handleWindowFocus = () => {
-      void refresh();
+      void refresh(demoEnabled);
     };
     const handleVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void refresh();
+        void refresh(demoEnabled);
       }
     };
 
@@ -371,7 +371,7 @@ export default function UnifiedDashboard() {
               </button>
               <button
                 type="button"
-                onClick={refresh}
+                onClick={() => refresh(demoEnabled)}
                 className="inline-flex items-center gap-1.5 text-xs font-semibold px-3 py-1.5 rounded-xl border border-teal-200/90 bg-teal-50/50 text-teal-900 hover:bg-teal-100/80 shadow-sm"
               >
                 <RefreshIcon /> Sync

@@ -2,7 +2,8 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { getThreats, Threat } from "@/lib/api";
-import { DEMO_THREATS, demoFallbackEnabled, emptyOrDemo } from "@/lib/demoData";
+import { DEMO_THREATS, emptyOrDemo } from "@/lib/demoData";
+import { useDemoMode } from "@/lib/useDemoMode";
 import { downloadCsv, threatsToCsvRows } from "@/lib/reportExport";
 import AlertList from "@/components/AlertList";
 import PageHero from "@/components/PageHero";
@@ -33,6 +34,7 @@ const filters: { label: string; value: Filter; style: string; active: string }[]
 ];
 
 export default function AlertsPage() {
+  const { demoEnabled } = useDemoMode();
   const [threats, setThreats] = useState<Threat[]>([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState<Filter>("ALL");
@@ -41,8 +43,8 @@ export default function AlertsPage() {
   const load = async (sev: Filter) => {
     setLoading(true);
     const data = await getThreats(sev === "ALL" ? undefined : sev);
-    const merged = emptyOrDemo(data?.threats, DEMO_THREATS);
-    setUsingDemo((data?.threats?.length ?? 0) === 0 && demoFallbackEnabled());
+    const merged = emptyOrDemo(data?.threats, DEMO_THREATS, demoEnabled);
+    setUsingDemo((data?.threats?.length ?? 0) === 0 && demoEnabled);
     const filtered = sev === "ALL" ? merged : merged.filter((t) => t.severity === sev);
     setThreats(filtered);
     setLoading(false);
@@ -53,7 +55,7 @@ export default function AlertsPage() {
     const id = setInterval(() => load(filter), 30_000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [filter]);
+  }, [filter, demoEnabled]);
 
   const badge = useMemo(() => {
     const n = threats.length;

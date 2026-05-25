@@ -231,8 +231,14 @@ def run(args):
 
     if args.lstm:
         logger.info("Using Phase 2 LSTM fall detector")
-        detector = LSTMFallDetector(threshold=args.threshold)
-        detector_source = "lstm"
+        try:
+            detector = LSTMFallDetector(threshold=args.threshold)
+            detector_source = "lstm"
+        except FileNotFoundError as e:
+            logger.warning("LSTM detector unavailable:\n%s", e)
+            logger.warning("Falling back to Phase 1 rules-based detector.")
+            detector = FallDetector(fall_threshold=args.threshold)
+            detector_source = "rules"
     else:
         logger.info("Using Phase 1 rules-based fall detector")
         detector = FallDetector(fall_threshold=args.threshold)

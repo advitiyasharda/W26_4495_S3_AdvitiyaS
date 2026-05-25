@@ -2,15 +2,23 @@
 Face Capture Utility - Capture face images from webcam
 Stores images in data/samples/{person_name}/ for use in training
 
-Run from project root: python3 scripts/capture_faces.py
+Run from project root: python scripts/capture_faces.py
 """
 import sys
+import os
 from pathlib import Path
 
-sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
+# Keep AVFoundation enabled on macOS for reliable webcam access.
+if sys.platform == "darwin":
+    os.environ.setdefault("OPENCV_VIDEOIO_PRIORITY_AVFOUNDATION", "1000")
+
+SCRIPT_DIR = Path(__file__).resolve().parent        # .../Implementation/scripts
+PROJECT_DIR = SCRIPT_DIR.parent                     # .../Implementation
+SAMPLES_DIR = PROJECT_DIR / "data" / "samples"
+
+sys.path.insert(0, str(PROJECT_DIR))
 
 import cv2
-import os
 import argparse
 
 
@@ -45,9 +53,9 @@ def capture_face_images(person_name, num_photos=10):
         person_name: Name of the person to capture photos for
         num_photos: Number of photos to capture
     """
-    # Create directory
-    save_dir = f'data/samples/{person_name}'
-    Path(save_dir).mkdir(parents=True, exist_ok=True)
+    # Create directory (use absolute path so script works from any CWD)
+    save_dir = SAMPLES_DIR / person_name
+    save_dir.mkdir(parents=True, exist_ok=True)
     
     print("\n" + "=" * 60)
     print(f"CAPTURING FACE IMAGES FOR: {person_name}")
@@ -114,8 +122,8 @@ def capture_face_images(person_name, num_photos=10):
                 (x, y, w, h) = faces[0]
                 face_roi = frame[y:y+h, x:x+w]
                 
-                filename = f'{save_dir}/{person_name}_{captured+1}.jpg'
-                cv2.imwrite(filename, face_roi)
+                filename = save_dir / f'{person_name}_{captured+1}.jpg'
+                cv2.imwrite(str(filename), face_roi)
                 print(f"  [OK] Photo {captured+1}/{num_photos} saved: {filename}")
                 captured += 1
             else:
@@ -129,10 +137,10 @@ def capture_face_images(person_name, num_photos=10):
     print("\n" + "=" * 60)
     if captured > 0:
         print(f"[OK] SUCCESS: Captured {captured}/{num_photos} photos")
-        print(f"[OK] Saved to: {save_dir}/")
+        print(f"[OK] Saved to: {save_dir}")
         print("\nNext steps:")
-        print("  1. python3 scripts/register_faces.py  (Register in system)")
-        print("  2. python3 tests/test_facial_recognition.py  (Test detection)")
+        print("  1. python scripts/register_faces.py  (Register in system)")
+        print("  2. python scripts/test_facial_recognition.py  (Test detection)")
         print("=" * 60)
         return True
     else:
@@ -240,8 +248,8 @@ def register_captured_person(person_name, person_id=None, role=None, display_nam
         
         print(f"  [OK] Added to database")
         
-        # Extract real face encodings from captured photos
-        photo_dir = Path(f'data/samples/{person_name}')
+        # Extract real face encodings from captured photos (absolute path)
+        photo_dir = SAMPLES_DIR / person_name
         photos = list(photo_dir.glob('*.jpg')) + list(photo_dir.glob('*.png'))
         encodings_registered = 0
         
@@ -261,7 +269,7 @@ def register_captured_person(person_name, person_id=None, role=None, display_nam
         
         if encodings_registered == 0:
             print(f"  [FAIL] Could not extract face encodings from photos in {photo_dir}")
-            print(f"     Check photo quality and try recapturing.")
+            print("     Check photo quality and try recapturing.")
             return
         
         print(f"  [OK] Registered {encodings_registered} face encoding(s) in engine")

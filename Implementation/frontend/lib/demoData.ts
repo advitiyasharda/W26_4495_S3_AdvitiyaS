@@ -121,6 +121,130 @@ export const DEMO_THREATS: Threat[] = [
     severity: "LOW",
     timestamp: hoursAgo(8, 0),
   },
+
+  // ── Previous 7 days (fills 7d dashboard alert chart) ─────────────────────
+  {
+    threat_type: "Unrecognised Face Detected",
+    message: "Unknown individual at west wing entrance — no database match. Camera footage saved.",
+    severity: "HIGH",
+    timestamp: daysAgo(1, 14, 30),
+  },
+  {
+    threat_type: "Multiple Failed Access Attempts",
+    message: "3 failed recognition attempts in 10 minutes at pharmacy corridor.",
+    severity: "HIGH",
+    timestamp: daysAgo(1, 9, 15),
+  },
+  {
+    threat_type: "Fall Detected",
+    message: "High-confidence fall event near service elevator — staff notified immediately.",
+    severity: "CRITICAL",
+    timestamp: daysAgo(2, 11, 20),
+  },
+  {
+    threat_type: "Unusual Access Time",
+    message: "Night-time door access at 01:32 AM — outside permitted hours for resident wing.",
+    severity: "HIGH",
+    timestamp: daysAgo(2, 1, 32),
+  },
+  {
+    threat_type: "Weapon Detected",
+    message: "Object detection flagged possible knife at main entrance. Camera footage retained.",
+    severity: "CRITICAL",
+    timestamp: daysAgo(3, 15, 45),
+  },
+  {
+    threat_type: "Tailgating Suspected",
+    message: "Two persons entered within 0.8 seconds at east wing — second had no face match.",
+    severity: "HIGH",
+    timestamp: daysAgo(3, 12, 0),
+  },
+  {
+    threat_type: "Wandering Resident",
+    message: "Resident John D. (#0832) exited restricted corridor during night hours (22:40).",
+    severity: "HIGH",
+    timestamp: daysAgo(4, 22, 40),
+  },
+  {
+    threat_type: "Unrecognised Face Detected",
+    message: "Unknown person detected at main entrance — possible unregistered visitor.",
+    severity: "MEDIUM",
+    timestamp: daysAgo(4, 10, 5),
+  },
+  {
+    threat_type: "Door Held Open",
+    message: "Main entrance held open 60s with no active session — auto-alert triggered.",
+    severity: "MEDIUM",
+    timestamp: daysAgo(5, 14, 15),
+  },
+  {
+    threat_type: "Fall Detected",
+    message: "Near-fall event — resident self-corrected. No injury reported.",
+    severity: "HIGH",
+    timestamp: daysAgo(5, 9, 0),
+  },
+  {
+    threat_type: "Camera Feed Interruption",
+    message: "West entrance camera offline for 8 minutes — network connectivity fault.",
+    severity: "LOW",
+    timestamp: daysAgo(6, 16, 0),
+  },
+  {
+    threat_type: "Badge Replay Pattern",
+    message: "Duplicate credential replay detected at pharmacy door — access blocked.",
+    severity: "HIGH",
+    timestamp: daysAgo(6, 11, 20),
+  },
+
+  // ── Weeks 2-4 (fills 30d alert filter) ───────────────────────────────────
+  {
+    threat_type: "Weapon Detected",
+    message: "Scissors-shaped object flagged at service entrance — security review initiated.",
+    severity: "CRITICAL",
+    timestamp: daysAgo(9, 10, 0),
+  },
+  {
+    threat_type: "Unusual Access Time",
+    message: "Staff badge used at 03:15 AM — flagged for management review.",
+    severity: "HIGH",
+    timestamp: daysAgo(11, 3, 15),
+  },
+  {
+    threat_type: "Fall Detected",
+    message: "Confirmed fall event — rapid lateral movement with high LSTM agreement.",
+    severity: "CRITICAL",
+    timestamp: daysAgo(14, 15, 5),
+  },
+  {
+    threat_type: "Tailgating Suspected",
+    message: "Dual entry event at west wing — one face unmatched in resident database.",
+    severity: "HIGH",
+    timestamp: daysAgo(16, 9, 0),
+  },
+  {
+    threat_type: "Unrecognised Face Detected",
+    message: "Visitor without badge detected at east corridor during peak hours.",
+    severity: "HIGH",
+    timestamp: daysAgo(19, 14, 20),
+  },
+  {
+    threat_type: "Multiple Failed Access Attempts",
+    message: "4 consecutive failed attempts at main entrance within 15 minutes.",
+    severity: "CRITICAL",
+    timestamp: daysAgo(22, 11, 0),
+  },
+  {
+    threat_type: "Fall Detected",
+    message: "Fall event near dining hall — caregiver assisted within 1 minute.",
+    severity: "CRITICAL",
+    timestamp: daysAgo(25, 10, 30),
+  },
+  {
+    threat_type: "Anomalous Behavioural Pattern",
+    message: "Resident accessed exit door 7 times in 2 hours — unusual repetitive pattern.",
+    severity: "MEDIUM",
+    timestamp: daysAgo(27, 15, 45),
+  },
 ];
 
 // ── Demo Audit Entries ────────────────────────────────────────────────────────
@@ -154,6 +278,46 @@ export const DEMO_AUDIT: AuditEntry[] = [
   { action: "ACCESS_DENIED",        user: "Vendor_12",     resource: "door/pharmacy-corridor",       result: "failed",  timestamp: ago(960) },
   { action: "DATA_EXPORT",          user: "Admin",         resource: "export/faces-encrypted",       result: "success", timestamp: ago(1000) },
   { action: "THREAT_CREATED",       user: "system",        resource: "threat/tailgate-0144",         result: "success", timestamp: ago(1020) },
+
+  // ── Historical audit entries (extends compliance table to 30d) ────────────
+  { action: "ACCESS_GRANTED",       user: "Nurse_Clarke",  resource: "door/main-entrance",           result: "success", timestamp: daysAgo(1,  8, 5)  },
+  { action: "ACCESS_DENIED",        user: "Unknown #7731", resource: "door/west-wing-entrance",      result: "failed",  timestamp: daysAgo(1,  9, 18) },
+  { action: "THREAT_CREATED",       user: "system",        resource: "threat/unrecognised-7731",     result: "success", timestamp: daysAgo(1,  9, 18) },
+  { action: "ACCESS_GRANTED",       user: "Margaret_T",    resource: "door/dining-hall",             result: "success", timestamp: daysAgo(1, 12, 30) },
+  { action: "FACE_REGISTRATION",    user: "Admin",         resource: "resident/James_K",             result: "success", timestamp: daysAgo(2, 10,  0) },
+  { action: "ACCESS_GRANTED",       user: "James_K",       resource: "door/main-entrance",           result: "success", timestamp: daysAgo(2, 11, 15) },
+  { action: "ANOMALY_DETECTED",     user: "system",        resource: "resident/Robert_H",            result: "success", timestamp: daysAgo(2, 14, 35) },
+  { action: "LOGIN_SUCCESS",        user: "Admin",         resource: "session/web-dashboard",        result: "success", timestamp: daysAgo(3,  8, 45) },
+  { action: "ACCESS_GRANTED",       user: "Dr_Patel",      resource: "door/medication-room",         result: "success", timestamp: daysAgo(3, 11, 50) },
+  { action: "REPORT_GENERATED",     user: "Admin",         resource: "report/monthly-compliance",    result: "success", timestamp: daysAgo(3, 15, 20) },
+  { action: "ACCESS_DENIED",        user: "Vendor_08",     resource: "door/staff-only-east",         result: "failed",  timestamp: daysAgo(4, 13,  5) },
+  { action: "THREAT_RESOLVED",      user: "Admin",         resource: "threat/tailgate-0832",         result: "success", timestamp: daysAgo(4, 16, 40) },
+  { action: "ACCESS_GRANTED",       user: "Night_Nurse_Sam", resource: "door/west-wing-entrance",   result: "success", timestamp: daysAgo(5,  7, 10) },
+  { action: "SYSTEM_CONFIG_CHANGE", user: "Admin",         resource: "config/fall-threshold",        result: "success", timestamp: daysAgo(5, 14,  0) },
+  { action: "DATA_EXPORT",          user: "Admin",         resource: "export/access-logs-monthly",   result: "success", timestamp: daysAgo(6,  9, 30) },
+  { action: "ACCESS_GRANTED",       user: "Linda_W",       resource: "door/dining-hall",             result: "success", timestamp: daysAgo(6, 12, 55) },
+  { action: "BACKUP_COMPLETED",     user: "system",        resource: "database/doorface.db",         result: "success", timestamp: daysAgo(7,  2,  0) },
+  { action: "FACE_REGISTRATION",    user: "Admin",         resource: "staff/Night_Nurse_Sam",        result: "success", timestamp: daysAgo(7, 10, 20) },
+  { action: "ACCESS_GRANTED",       user: "Robert_H",      resource: "door/common-room",             result: "success", timestamp: daysAgo(8, 15, 45) },
+  { action: "POLICY_UPDATE",        user: "Admin",         resource: "policy/door-hours",            result: "success", timestamp: daysAgo(9, 11,  0) },
+  { action: "ACCESS_DENIED",        user: "Unknown",       resource: "door/pharmacy-corridor",       result: "failed",  timestamp: daysAgo(10,  8, 30) },
+  { action: "LOGIN_SUCCESS",        user: "Admin",         resource: "session/web-dashboard",        result: "success", timestamp: daysAgo(11,  9,  0) },
+  { action: "REPORT_GENERATED",     user: "Admin",         resource: "report/incident-summary",      result: "success", timestamp: daysAgo(12, 14, 15) },
+  { action: "FACE_REGISTRATION",    user: "Admin",         resource: "resident/Linda_W",             result: "success", timestamp: daysAgo(14,  9, 30) },
+  { action: "BACKUP_COMPLETED",     user: "system",        resource: "database/doorface.db",         result: "success", timestamp: daysAgo(14,  2,  0) },
+  { action: "ACCESS_GRANTED",       user: "John_D",        resource: "door/main-entrance",           result: "success", timestamp: daysAgo(15, 11, 40) },
+  { action: "SYSTEM_CONFIG_CHANGE", user: "Admin",         resource: "config/recognition-threshold", result: "success", timestamp: daysAgo(16, 10,  5) },
+  { action: "DATA_EXPORT",          user: "Admin",         resource: "export/faces-encrypted",       result: "success", timestamp: daysAgo(17, 15, 30) },
+  { action: "ACCESS_GRANTED",       user: "Nurse_Clarke",  resource: "door/medication-room",         result: "success", timestamp: daysAgo(18,  8, 55) },
+  { action: "POLICY_UPDATE",        user: "Admin",         resource: "policy/visitor-log",           result: "success", timestamp: daysAgo(20, 11, 20) },
+  { action: "BACKUP_COMPLETED",     user: "system",        resource: "database/doorface.db",         result: "success", timestamp: daysAgo(21,  2,  0) },
+  { action: "FACE_REGISTRATION",    user: "Admin",         resource: "resident/John_D",              result: "success", timestamp: daysAgo(22, 10, 10) },
+  { action: "ACCESS_DENIED",        user: "Vendor_19",     resource: "door/main-entrance",           result: "failed",  timestamp: daysAgo(23, 14, 0)  },
+  { action: "REPORT_GENERATED",     user: "Admin",         resource: "report/weekly-access",         result: "success", timestamp: daysAgo(24, 15, 45) },
+  { action: "LOGIN_SUCCESS",        user: "Admin",         resource: "session/web-dashboard",        result: "success", timestamp: daysAgo(25,  8,  0) },
+  { action: "BACKUP_COMPLETED",     user: "system",        resource: "database/doorface.db",         result: "success", timestamp: daysAgo(28,  2,  0) },
+  { action: "ACCESS_GRANTED",       user: "Dr_Patel",      resource: "door/west-wing-entrance",      result: "success", timestamp: daysAgo(28, 13, 30) },
+  { action: "SYSTEM_CONFIG_CHANGE", user: "Admin",         resource: "config/camera-east",           result: "success", timestamp: daysAgo(29,  9, 15) },
 ];
 
 // ── Demo Access Logs ──────────────────────────────────────────────────────────
@@ -254,6 +418,42 @@ export const DEMO_LOGS: AccessLog[] = [
   { person_id: "0408", name: "James K.",         type: "entry", status: "success", confidence: 0.87, timestamp: daysAgo(5, 14, 50) },
   { person_id: "1102", name: "Margaret T.",      type: "entry", status: "success", confidence: 0.98, timestamp: daysAgo(6, 9, 0) },
   { person_id: "0203", name: "Dr. Patel",        type: "exit",  status: "success", confidence: 0.92, timestamp: daysAgo(6, 16, 25) },
+
+  // ── Historical weeks 2-4 (fills 30d time-range selector) ─────────────────
+  { person_id: "0551", name: "Nurse Clarke",     type: "entry", status: "success", confidence: 0.95, timestamp: daysAgo(7,  9, 10) },
+  { person_id: "1102", name: "Margaret T.",      type: "exit",  status: "success", confidence: 0.92, timestamp: daysAgo(7, 14, 30) },
+  { person_id: "0203", name: "Dr. Patel",        type: "entry", status: "success", confidence: 0.88, timestamp: daysAgo(7, 16,  0) },
+  { person_id: "4821", name: null,               type: "entry", status: "failed",  confidence: 0.30, timestamp: daysAgo(8, 10, 15) },
+  { person_id: "0832", name: "John D.",          type: "entry", status: "success", confidence: 0.91, timestamp: daysAgo(8, 15, 45) },
+  { person_id: "0301", name: "Robert H.",        type: "exit",  status: "success", confidence: 0.87, timestamp: daysAgo(9,  8, 20) },
+  { person_id: "0720", name: "Linda W.",         type: "entry", status: "success", confidence: 0.93, timestamp: daysAgo(9, 13, 55) },
+  { person_id: "0551", name: "Nurse Clarke",     type: "exit",  status: "success", confidence: 0.96, timestamp: daysAgo(9, 17, 40) },
+  { person_id: "1102", name: "Margaret T.",      type: "entry", status: "success", confidence: 0.97, timestamp: daysAgo(10,  9,  5) },
+  { person_id: "0203", name: "Dr. Patel",        type: "exit",  status: "success", confidence: 0.89, timestamp: daysAgo(10, 16, 50) },
+  { person_id: "0408", name: "James K.",         type: "entry", status: "success", confidence: 0.86, timestamp: daysAgo(11, 10, 30) },
+  { person_id: "0832", name: "John D.",          type: "exit",  status: "success", confidence: 0.90, timestamp: daysAgo(11, 14, 15) },
+  { person_id: "0915", name: "Night Nurse Sam",  type: "entry", status: "success", confidence: 0.94, timestamp: daysAgo(12,  7,  0) },
+  { person_id: "0301", name: "Robert H.",        type: "entry", status: "success", confidence: 0.88, timestamp: daysAgo(12, 11, 25) },
+  { person_id: "4821", name: null,               type: "entry", status: "failed",  confidence: 0.28, timestamp: daysAgo(13, 13, 10) },
+  { person_id: "1102", name: "Margaret T.",      type: "exit",  status: "success", confidence: 0.95, timestamp: daysAgo(13, 17,  0) },
+  { person_id: "0551", name: "Nurse Clarke",     type: "entry", status: "success", confidence: 0.98, timestamp: daysAgo(14,  8, 40) },
+  { person_id: "0720", name: "Linda W.",         type: "exit",  status: "success", confidence: 0.92, timestamp: daysAgo(14, 15, 20) },
+  { person_id: "0203", name: "Dr. Patel",        type: "entry", status: "success", confidence: 0.90, timestamp: daysAgo(16,  9, 30) },
+  { person_id: "0832", name: "John D.",          type: "exit",  status: "success", confidence: 0.91, timestamp: daysAgo(16, 14, 45) },
+  { person_id: null,   name: null,               type: "entry", status: "failed",  confidence: 0.19, timestamp: daysAgo(17, 11,  0) },
+  { person_id: "0408", name: "James K.",         type: "entry", status: "success", confidence: 0.87, timestamp: daysAgo(18, 10, 15) },
+  { person_id: "1102", name: "Margaret T.",      type: "entry", status: "success", confidence: 0.96, timestamp: daysAgo(18, 16, 30) },
+  { person_id: "0301", name: "Robert H.",        type: "exit",  status: "success", confidence: 0.88, timestamp: daysAgo(20,  9,  0) },
+  { person_id: "0551", name: "Nurse Clarke",     type: "exit",  status: "success", confidence: 0.97, timestamp: daysAgo(20, 13, 50) },
+  { person_id: "0203", name: "Dr. Patel",        type: "entry", status: "success", confidence: 0.89, timestamp: daysAgo(22,  8, 10) },
+  { person_id: "0720", name: "Linda W.",         type: "entry", status: "success", confidence: 0.93, timestamp: daysAgo(22, 15,  0) },
+  { person_id: "0832", name: "John D.",          type: "entry", status: "success", confidence: 0.92, timestamp: daysAgo(24, 10, 20) },
+  { person_id: "1102", name: "Margaret T.",      type: "exit",  status: "success", confidence: 0.95, timestamp: daysAgo(24, 14,  5) },
+  { person_id: "4821", name: null,               type: "entry", status: "failed",  confidence: 0.32, timestamp: daysAgo(26, 11, 30) },
+  { person_id: "0551", name: "Nurse Clarke",     type: "entry", status: "success", confidence: 0.99, timestamp: daysAgo(26, 16, 15) },
+  { person_id: "0203", name: "Dr. Patel",        type: "exit",  status: "success", confidence: 0.88, timestamp: daysAgo(28,  9, 40) },
+  { person_id: "0408", name: "James K.",         type: "entry", status: "success", confidence: 0.86, timestamp: daysAgo(28, 14, 55) },
+  { person_id: "0301", name: "Robert H.",        type: "exit",  status: "success", confidence: 0.90, timestamp: daysAgo(29, 11,  0) },
 ];
 
 // ── Demo Fall Events (when API buffer is empty) ───────────────────────────────
@@ -362,6 +562,298 @@ export const DEMO_FALL_EVENTS: FallEvent[] = [
     description: "Confirmed fall pattern — staff alert auto-sent",
     timestamp: daysAgo(6, 16, 8),
   },
+
+  // ── Historical falls (fills 30d confidence histogram & area chart) ─────────
+  {
+    anomaly_id: 14,
+    user_id: "0301",
+    anomaly_type: "fall",
+    anomaly_score: 0.76,
+    description: "Unstable gait sequence — possible near-miss at corridor junction",
+    timestamp: daysAgo(7, 14, 20),
+  },
+  {
+    anomaly_id: 15,
+    user_id: "0832",
+    anomaly_type: "fall",
+    anomaly_score: 0.47,
+    description: "Low torso trajectory — camera occlusion reduced confidence",
+    timestamp: daysAgo(9, 10, 50),
+  },
+  {
+    anomaly_id: 16,
+    user_id: "1102",
+    anomaly_type: "fall",
+    anomaly_score: 0.89,
+    description: "Rapid floor contact — high LSTM model confidence",
+    timestamp: daysAgo(11, 15, 5),
+  },
+  {
+    anomaly_id: 17,
+    user_id: "0551",
+    anomaly_type: "fall",
+    anomaly_score: 0.61,
+    description: "Lateral sway exceeding threshold near doorway",
+    timestamp: daysAgo(14, 9, 35),
+  },
+  {
+    anomaly_id: 18,
+    user_id: "0408",
+    anomaly_type: "fall",
+    anomaly_score: 0.82,
+    description: "Confirmed fall — caregiver response within 2 minutes",
+    timestamp: daysAgo(17, 16, 0),
+  },
+  {
+    anomaly_id: 19,
+    user_id: "0203",
+    anomaly_type: "fall",
+    anomaly_score: 0.35,
+    description: "Low-confidence event — background interference, inconclusive",
+    timestamp: daysAgo(21, 11, 45),
+  },
+  {
+    anomaly_id: 20,
+    user_id: "0832",
+    anomaly_type: "fall",
+    anomaly_score: 0.70,
+    description: "Velocity spike and hip drop near service elevator",
+    timestamp: daysAgo(25, 13, 30),
+  },
+
+  // ── Additional today events (boosts "Falls today" stat & chart density) ────
+  {
+    anomaly_id: 21,
+    user_id: "0720",
+    anomaly_type: "fall",
+    anomaly_score: 0.17,
+    description: "Likely false positive — shadow movement near door frame",
+    timestamp: ago(5),
+  },
+  {
+    anomaly_id: 22,
+    user_id: "0551",
+    anomaly_type: "fall",
+    anomaly_score: 0.93,
+    description: "Very high confidence fall — sudden full-body drop, resident floor contact confirmed",
+    timestamp: ago(65),
+  },
+  {
+    anomaly_id: 23,
+    user_id: "1102",
+    anomaly_type: "fall",
+    anomaly_score: 0.13,
+    description: "Noise in pose model — curtain movement triggered low-confidence event",
+    timestamp: ago(150),
+  },
+  {
+    anomaly_id: 24,
+    user_id: "0301",
+    anomaly_type: "fall",
+    anomaly_score: 0.57,
+    description: "Moderate trunk lean with slow recovery — possible dizziness episode",
+    timestamp: ago(210),
+  },
+  {
+    anomaly_id: 25,
+    user_id: "0408",
+    anomaly_type: "fall",
+    anomaly_score: 0.78,
+    description: "Rapid downward torso trajectory at west-wing exit",
+    timestamp: ago(290),
+  },
+
+  // ── Extra day-1 events (area chart density) ───────────────────────────────
+  {
+    anomaly_id: 26,
+    user_id: "0720",
+    anomaly_type: "fall",
+    anomaly_score: 0.45,
+    description: "Partial body occluded — possible seated fall near bench",
+    timestamp: daysAgo(1, 8, 50),
+  },
+  {
+    anomaly_id: 27,
+    user_id: "0203",
+    anomaly_type: "fall",
+    anomaly_score: 0.11,
+    description: "Background object motion — bin moved by cleaning staff",
+    timestamp: daysAgo(1, 13, 10),
+  },
+
+  // ── Extra events days 2-6 ─────────────────────────────────────────────────
+  {
+    anomaly_id: 28,
+    user_id: "0915",
+    anomaly_type: "fall",
+    anomaly_score: 0.66,
+    description: "Rapid knee-bend to floor level — possible controlled sit-down",
+    timestamp: daysAgo(2, 16, 0),
+  },
+  {
+    anomaly_id: 29,
+    user_id: "0832",
+    anomaly_type: "fall",
+    anomaly_score: 0.95,
+    description: "Highest-confidence event this week — full fall with no recovery motion for 4s",
+    timestamp: daysAgo(3, 14, 25),
+  },
+  {
+    anomaly_id: 30,
+    user_id: "1102",
+    anomaly_type: "fall",
+    anomaly_score: 0.29,
+    description: "Low torso dip — resident tying shoelace, marked as reviewed",
+    timestamp: daysAgo(4, 10, 40),
+  },
+  {
+    anomaly_id: 31,
+    user_id: "0301",
+    anomaly_type: "fall",
+    anomaly_score: 0.74,
+    description: "Stumble-and-recover near entrance mat — staff checked on resident",
+    timestamp: daysAgo(5, 15, 30),
+  },
+  {
+    anomaly_id: 32,
+    user_id: "0408",
+    anomaly_type: "fall",
+    anomaly_score: 0.53,
+    description: "Sudden posture drop in corridor — recovered within 2s",
+    timestamp: daysAgo(6, 9, 45),
+  },
+
+  // ── More historical events (richer 30d area chart) ────────────────────────
+  {
+    anomaly_id: 33,
+    user_id: "0720",
+    anomaly_type: "fall",
+    anomaly_score: 0.88,
+    description: "Confirmed fall — resident unresponsive for 8s before staff arrived",
+    timestamp: daysAgo(8, 11, 0),
+  },
+  {
+    anomaly_id: 34,
+    user_id: "0551",
+    anomaly_type: "fall",
+    anomaly_score: 0.19,
+    description: "Very low confidence — LSTM disagrees with pose model, flagged for review",
+    timestamp: daysAgo(10, 14, 30),
+  },
+  {
+    anomaly_id: 35,
+    user_id: "0203",
+    anomaly_type: "fall",
+    anomaly_score: 0.63,
+    description: "Moderate fall signature — resident was bending to pick up item",
+    timestamp: daysAgo(12, 10, 55),
+  },
+  {
+    anomaly_id: 36,
+    user_id: "0832",
+    anomaly_type: "fall",
+    anomaly_score: 0.92,
+    description: "High-confidence event — chair slide caused rapid floor contact",
+    timestamp: daysAgo(15, 16, 20),
+  },
+  {
+    anomaly_id: 37,
+    user_id: "1102",
+    anomaly_type: "fall",
+    anomaly_score: 0.44,
+    description: "Borderline score — seated transition near door, posture recovered quickly",
+    timestamp: daysAgo(18, 9, 10),
+  },
+  {
+    anomaly_id: 38,
+    user_id: "0301",
+    anomaly_type: "fall",
+    anomaly_score: 0.77,
+    description: "Lateral fall with delayed recovery — caregiver notified via alert",
+    timestamp: daysAgo(22, 13, 0),
+  },
+  {
+    anomaly_id: 39,
+    user_id: "0408",
+    anomaly_type: "fall",
+    anomaly_score: 0.85,
+    description: "Slip on wet floor — LSTM score high, pose model agreed",
+    timestamp: daysAgo(26, 15, 15),
+  },
+  {
+    anomaly_id: 40,
+    user_id: "0720",
+    anomaly_type: "fall",
+    anomaly_score: 0.16,
+    description: "False alarm — rapid arm gesture near camera triggered low-score event",
+    timestamp: daysAgo(28, 12, 40),
+  },
+
+  // ── Gap-fill events (completes all 30 days for the area chart) ────────────
+  {
+    anomaly_id: 41,
+    user_id: "0551",
+    anomaly_type: "fall",
+    anomaly_score: 0.69,
+    description: "Stair descent — sudden deceleration flagged by velocity model",
+    timestamp: daysAgo(13, 11, 10),
+  },
+  {
+    anomaly_id: 42,
+    user_id: "1102",
+    anomaly_type: "fall",
+    anomaly_score: 0.53,
+    description: "Slow descent to floor — possibly intentional, low urgency",
+    timestamp: daysAgo(16, 14, 0),
+  },
+  {
+    anomaly_id: 43,
+    user_id: "0301",
+    anomaly_type: "fall",
+    anomaly_score: 0.87,
+    description: "High-confidence fall — resident found seated on floor, uninjured",
+    timestamp: daysAgo(19, 10, 30),
+  },
+  {
+    anomaly_id: 44,
+    user_id: "0832",
+    anomaly_type: "fall",
+    anomaly_score: 0.42,
+    description: "Partial occlusion — model flagged unusual posture near door frame",
+    timestamp: daysAgo(20, 15, 45),
+  },
+  {
+    anomaly_id: 45,
+    user_id: "0203",
+    anomaly_type: "fall",
+    anomaly_score: 0.78,
+    description: "Knee buckle detected — resident steadied themselves on handrail",
+    timestamp: daysAgo(23, 9, 20),
+  },
+  {
+    anomaly_id: 46,
+    user_id: "0408",
+    anomaly_type: "fall",
+    anomaly_score: 0.33,
+    description: "Low-confidence flag — cleaning trolley movement confused pose model",
+    timestamp: daysAgo(24, 13, 55),
+  },
+  {
+    anomaly_id: 47,
+    user_id: "0720",
+    anomaly_type: "fall",
+    anomaly_score: 0.81,
+    description: "Rapid floor contact at east wing — caregiver alerted within 30s",
+    timestamp: daysAgo(27, 16, 5),
+  },
+  {
+    anomaly_id: 48,
+    user_id: "0915",
+    anomaly_type: "fall",
+    anomaly_score: 0.58,
+    description: "Moderate trunk drop — resident was picking up dropped item",
+    timestamp: daysAgo(29, 10, 15),
+  },
 ];
 
 export const DEMO_FALL_STATUS: FallStatusResponse = {
@@ -446,6 +938,31 @@ export const DEMO_OBJECT_EVENTS: ObjectDetectionEvent[] = [
   obj("wet_floor_sign", "OPERATIONAL", "INFO", 0.95, daysAgo(2, 9, 0), 0, 2),
   obj("gurney", "MOBILITY_AID", "MEDIUM", 0.88, daysAgo(2, 15, 30), 0, 6),
   obj("iv_pole", "MOBILITY_AID", "LOW", 0.75, daysAgo(3, 10, 12), 0, 4),
+
+  // ── Days 4-7 coverage (fills 7d dashboard range) ─────────────────────────
+  obj("backpack",       "PARCEL",          "HIGH",     0.79, daysAgo(4,  8, 30),  60, 5),
+  obj("wheelchair",     "MOBILITY_AID",    "INFO",     0.92, daysAgo(4, 11, 15),   0, 4),
+  obj("unknown_object", "SECURITY_THREAT", "HIGH",     0.61, daysAgo(4, 14,  0),   0, 6),
+  obj("suitcase",       "PARCEL",          "LOW",      0.84, daysAgo(5,  9, 40), 180, 4),
+  obj("knife",          "WEAPON",          "CRITICAL", 0.72, daysAgo(5, 16, 25),   0, 7),
+  obj("person",         "OPERATIONAL",     "INFO",     0.78, daysAgo(5, 13, 10),   0, 3),
+  obj("cane",           "MOBILITY_AID",    "LOW",      0.88, daysAgo(6, 10,  5),   0, 4),
+  obj("delivery_box",   "PARCEL",          "MEDIUM",   0.83, daysAgo(6, 14, 50),  90, 6),
+  obj("cleaning_cart",  "OPERATIONAL",     "LOW",      0.76, daysAgo(7,  8, 20),   0, 3),
+  obj("handbag",        "PARCEL",          "INFO",     0.81, daysAgo(7, 12,  0),   0, 4),
+  obj("scissors",       "WEAPON",          "CRITICAL", 0.65, daysAgo(7, 15, 35),   0, 5),
+
+  // ── Weeks 2-4 (fills 30d range) ──────────────────────────────────────────
+  obj("backpack",       "PARCEL",          "HIGH",     0.77, daysAgo(10,  9,  0),  30, 5),
+  obj("walker",         "MOBILITY_AID",    "INFO",     0.90, daysAgo(10, 13, 30),   0, 4),
+  obj("knife",          "WEAPON",          "CRITICAL", 0.80, daysAgo(14, 10, 15),   0, 6),
+  obj("suitcase",       "PARCEL",          "MEDIUM",   0.85, daysAgo(14, 16,  0),  60, 4),
+  obj("unknown_object", "SECURITY_THREAT", "HIGH",     0.57, daysAgo(18, 11,  0),   0, 5),
+  obj("wheelchair",     "MOBILITY_AID",    "INFO",     0.93, daysAgo(20,  8, 30),   0, 3),
+  obj("handbag",        "PARCEL",          "LOW",      0.78, daysAgo(22, 14, 15),   0, 4),
+  obj("baseball_bat",   "WEAPON",          "CRITICAL", 0.75, daysAgo(25, 10,  0),   0, 7),
+  obj("crutch",         "MOBILITY_AID",    "MEDIUM",   0.70, daysAgo(28,  9, 20),   0, 3),
+  obj("backpack",       "PARCEL",          "HIGH",     0.82, daysAgo(28, 15, 40), 120, 5),
 ];
 
 function demoObjectCategoryCounts(events: ObjectDetectionEvent[]): Partial<Record<ObjectCategory, number>> {
@@ -497,21 +1014,52 @@ export function forceDemoOnly(): boolean {
   return process.env.NEXT_PUBLIC_FORCE_DEMO_DATA === "true";
 }
 
+/**
+ * Returns true when demo-data fallback is active.
+ *
+ * Priority (highest → lowest):
+ *  1. localStorage "facedoor_demo_mode" key — set by the sidebar toggle.
+ *  2. NEXT_PUBLIC_USE_DEMO_DATA env var — build-time opt-out.
+ *  3. Default: true (show demo data when API returns empty results).
+ */
 export function demoFallbackEnabled(): boolean {
+  if (typeof window !== "undefined") {
+    const stored = window.localStorage.getItem("facedoor_demo_mode");
+    if (stored !== null) return stored === "true";
+  }
   return process.env.NEXT_PUBLIC_USE_DEMO_DATA !== "false";
 }
 
-export function emptyOrDemo<T>(api: T[] | undefined | null, demo: T[]): T[] {
+/**
+ * Return demo data when the toggle is ON, or as a fallback when the API list is
+ * empty.  Pass `demoEnabled` from `useDemoMode()` as the third argument so the
+ * decision is driven by the React state rather than a raw localStorage read.
+ *
+ * Priority:
+ *   1. Force-demo env var → always demo
+ *   2. demoEnabled === true → always demo (overrides real data too)
+ *   3. API returned data  → use real data
+ *   4. API empty + demo fallback from localStorage → demo
+ *   5. Otherwise → empty
+ */
+export function emptyOrDemo<T>(
+  api: T[] | undefined | null,
+  demo: T[],
+  demoEnabled?: boolean,
+): T[] {
   if (forceDemoOnly()) return demo;
-  const list = api ?? [];
-  if (list.length > 0) return list;
-  if (demoFallbackEnabled()) return demo;
-  return [];
+  const enabled = demoEnabled !== undefined ? demoEnabled : demoFallbackEnabled();
+  if (enabled) return demo;
+  return api ?? [];
 }
 
-export function nullOrDemo<T>(api: T | null | undefined, demo: T): T | null {
+export function nullOrDemo<T>(
+  api: T | null | undefined,
+  demo: T,
+  demoEnabled?: boolean,
+): T | null {
   if (forceDemoOnly()) return demo;
-  if (api != null) return api;
-  if (demoFallbackEnabled()) return demo;
-  return null;
+  const enabled = demoEnabled !== undefined ? demoEnabled : demoFallbackEnabled();
+  if (enabled) return demo;
+  return api ?? null;
 }

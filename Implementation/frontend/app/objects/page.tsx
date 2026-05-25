@@ -27,7 +27,8 @@ import ObjectCategoryBar from "@/components/ObjectCategoryBar";
 import { ObjectCategoryIcon } from "@/components/icons/ObjectCategoryIcons";
 import PageHero from "@/components/PageHero";
 import { IconObjectFrame } from "@/components/icons/DoorIcons";
-import { DEMO_OBJECT_EVENTS, DEMO_OBJECT_STATUS, demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoData";
+import { DEMO_OBJECT_EVENTS, DEMO_OBJECT_STATUS, emptyOrDemo, nullOrDemo } from "@/lib/demoData";
+import { useDemoMode } from "@/lib/useDemoMode";
 import { downloadCsv, objectEventsToCsvRows } from "@/lib/reportExport";
 import { IconDownload } from "@/components/icons/DoorIcons";
 
@@ -61,6 +62,7 @@ function confTone(c: number): string {
 }
 
 export default function ObjectsPage() {
+  const { demoEnabled } = useDemoMode();
   const [allEvents, setAllEvents] = useState<ObjectDetectionEvent[]>([]);
   const [status, setStatus] = useState<ObjectStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -68,24 +70,25 @@ export default function ObjectsPage() {
   const [categoryFilter, setCategoryFilter] = useState<ObjectCategory | "">("");
   const [severityFilter, setSeverityFilter] = useState<ObjectSeverity | "">("");
 
-  const load = useCallback(async () => {
+  const load = useCallback(async (demo: boolean) => {
     setLoading(true);
     const [eventsData, statusData] = await Promise.all([
       getObjectEvents(280, undefined, undefined),
       getObjectStatus(),
     ]);
     const apiEv = eventsData?.events ?? [];
-    setUsingDemo(apiEv.length === 0 && demoFallbackEnabled());
-    setAllEvents(emptyOrDemo(apiEv, DEMO_OBJECT_EVENTS));
-    setStatus(nullOrDemo(statusData, DEMO_OBJECT_STATUS));
+    setUsingDemo(apiEv.length === 0 && demo);
+    setAllEvents(emptyOrDemo(apiEv, DEMO_OBJECT_EVENTS, demo));
+    setStatus(nullOrDemo(statusData, DEMO_OBJECT_STATUS, demo));
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    load();
-    const id = setInterval(load, 15_000);
+    load(demoEnabled);
+    const id = setInterval(() => load(demoEnabled), 15_000);
     return () => clearInterval(id);
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load, demoEnabled]);
 
   const filtered = useMemo(() => {
     return allEvents.filter((e) => {
@@ -148,7 +151,7 @@ export default function ObjectsPage() {
             )}
             <button
               type="button"
-              onClick={load}
+              onClick={() => load(demoEnabled)}
               className="text-sm font-semibold px-3 py-1.5 rounded-xl border border-slate-200 bg-white text-slate-700 hover:bg-slate-50 shadow-sm"
             >
               Refresh

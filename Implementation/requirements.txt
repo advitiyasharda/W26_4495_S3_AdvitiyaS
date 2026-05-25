@@ -1,13 +1,31 @@
+# FaceDoor backend dependencies
+# Install with:  pip install -r requirements.txt
+#
+# After installing, also download the MediaPipe pose model used by fall
+# detection (npm install in ../frontend does this automatically):
+#   curl -L -o models/pose_landmarker.task \
+#     https://storage.googleapis.com/mediapipe-models/pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task
+
+# --- Web / API ---
 flask>=3.0.0
 flask-cors>=4.0.0
+
+# --- Computer vision & ML ---
 opencv-python>=4.9.0
-scikit-learn>=1.4.0
-numpy>=1.26.0
-pandas>=2.1.0
-Pillow>=10.2.0
-python-dotenv>=1.0.0
-cryptography>=42.0.0
 mediapipe>=0.10.0
 tensorflow>=2.16.0
 face_recognition>=1.3.0
 ultralytics>=8.0.0
+
+# --- Data / numerics ---
+numpy>=1.26.0
+pandas>=2.1.0
+scikit-learn>=1.4.0
+Pillow>=10.2.0
+
+# --- HTTP client (used by capture_faces.py, fall_detection_camera.py) ---
+requests>=2.31.0
+
+# --- Config / security ---
+python-dotenv>=1.0.0
+cryptography>=42.0.0

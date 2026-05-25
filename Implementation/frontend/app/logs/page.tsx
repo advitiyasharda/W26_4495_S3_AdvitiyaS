@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { getAccessLogs, getUsers, deleteUser, AccessLog, User } from "@/lib/api";
 import { DEMO_LOGS, DEMO_USERS, emptyOrDemo } from "@/lib/demoData";
+import { useDemoMode } from "@/lib/useDemoMode";
 import { downloadCsv, logsToCsvRows } from "@/lib/reportExport";
 import AccessLogsTable from "@/components/AccessLogsTable";
 import PageHero from "@/components/PageHero";
@@ -25,6 +26,7 @@ function enrolledRolePillClass(role: string | undefined): string {
 }
 
 export default function LogsPage() {
+  const { demoEnabled } = useDemoMode();
   const [logs, setLogs] = useState<AccessLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [limit, setLimit] = useState(20);
@@ -45,19 +47,22 @@ export default function LogsPage() {
     if (hasRealPeople) {
       setLogs(data!.logs);
       setUsingDemo(false);
-    } else {
+    } else if (demoEnabled) {
       setLogs(showAll ? DEMO_LOGS : DEMO_LOGS.slice(0, l));
       setUsingDemo(true);
+    } else {
+      setLogs([]);
+      setUsingDemo(false);
     }
     setLoading(false);
   };
 
   useEffect(() => {
     load(limit);
-  }, [limit, showAll]); // eslint-disable-line
+  }, [limit, showAll, demoEnabled]); // eslint-disable-line
 
   useEffect(() => {
-    getUsers().then((data) => setRegisteredUsers(emptyOrDemo(data?.users, DEMO_USERS)));
+    getUsers().then((data) => setRegisteredUsers(emptyOrDemo(data?.users, DEMO_USERS, demoEnabled)));
   }, []);
 
   const openPeopleModal = async () => {
@@ -65,7 +70,7 @@ export default function LogsPage() {
     setConfirmDelete(null);
     setUsersLoading(true);
     const data = await getUsers();
-    setRegisteredUsers(emptyOrDemo(data?.users, DEMO_USERS));
+    setRegisteredUsers(emptyOrDemo(data?.users, DEMO_USERS, demoEnabled));
     setUsersLoading(false);
   };
 

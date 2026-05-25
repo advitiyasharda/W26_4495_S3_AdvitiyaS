@@ -2,7 +2,8 @@
 
 import { useEffect, useState, useCallback, useMemo } from "react";
 import { getFallEvents, getFallStatus, resetFallDetector, FallEvent, FallStatusResponse } from "@/lib/api";
-import { DEMO_FALL_EVENTS, DEMO_FALL_STATUS, demoFallbackEnabled, emptyOrDemo, nullOrDemo } from "@/lib/demoData";
+import { DEMO_FALL_EVENTS, DEMO_FALL_STATUS, emptyOrDemo, nullOrDemo } from "@/lib/demoData";
+import { useDemoMode } from "@/lib/useDemoMode";
 import { downloadCsv, fallEventsToCsvRows } from "@/lib/reportExport";
 import PageHero from "@/components/PageHero";
 import { IconCalmCheck, IconCameraDoor, IconDownload, IconFallMotion } from "@/components/icons/DoorIcons";
@@ -40,6 +41,7 @@ function confidenceColor(conf: number): string {
 const HIST_FILLS = ["#fce7f3", "#fbcfe8", "#f9a8d4", "#f472b6", "#ec4899"];
 
 export default function FallsPage() {
+  const { demoEnabled } = useDemoMode();
   const [eventsRaw, setEventsRaw] = useState<FallEvent[]>([]);
   const [status, setStatus] = useState<FallStatusResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -47,21 +49,22 @@ export default function FallsPage() {
   const [showResetConfirm, setShowResetConfirm] = useState(false);
   const [usingDemo, setUsingDemo] = useState(false);
 
-  const refresh = useCallback(async () => {
+  const refresh = useCallback(async (demo: boolean) => {
     setLoading(true);
     const [eventsData, statusData] = await Promise.all([getFallEvents(100), getFallStatus()]);
     const apiEvents = eventsData?.events ?? [];
-    setUsingDemo(apiEvents.length === 0 && demoFallbackEnabled());
-    setEventsRaw(emptyOrDemo(apiEvents, DEMO_FALL_EVENTS));
-    setStatus(nullOrDemo(statusData, DEMO_FALL_STATUS));
+    setUsingDemo(apiEvents.length === 0 && demo);
+    setEventsRaw(emptyOrDemo(apiEvents, DEMO_FALL_EVENTS, demo));
+    setStatus(nullOrDemo(statusData, DEMO_FALL_STATUS, demo));
     setLoading(false);
   }, []);
 
   useEffect(() => {
-    refresh();
-    const id = setInterval(refresh, 15_000);
+    refresh(demoEnabled);
+    const id = setInterval(() => refresh(demoEnabled), 15_000);
     return () => clearInterval(id);
-  }, [refresh]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refresh, demoEnabled]);
 
   const events = eventsRaw;
   const todayStr = new Date().toDateString();
@@ -77,7 +80,7 @@ export default function FallsPage() {
     await resetFallDetector();
     setResetting(false);
     setShowResetConfirm(false);
-    await refresh();
+    await refresh(demoEnabled);
   };
 
   const latestFall = events[0];

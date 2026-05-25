@@ -3,13 +3,15 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { getAuditLog, AuditEntry } from "@/lib/api";
 import { exportAuditTrailCsv } from "@/lib/reportExport";
-import { DEMO_AUDIT, demoFallbackEnabled, emptyOrDemo } from "@/lib/demoData";
+import { DEMO_AUDIT, emptyOrDemo } from "@/lib/demoData";
+import { useDemoMode } from "@/lib/useDemoMode";
 import AuditTable from "@/components/AuditTable";
 import PageHero from "@/components/PageHero";
 import ComplianceActionChart from "@/components/compliance/ComplianceActionChart";
 import { IconAuditTrail, IconDownload } from "@/components/icons/DoorIcons";
 
 export default function CompliancePage() {
+  const { demoEnabled } = useDemoMode();
   const [entries, setEntries] = useState<AuditEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [limit, setLimit] = useState(50);
@@ -19,15 +21,15 @@ export default function CompliancePage() {
   const load = async (l: number) => {
     setLoading(true);
     const data = await getAuditLog(l);
-    const merged = emptyOrDemo(data?.audit_log, DEMO_AUDIT);
-    setUsingDemo((data?.audit_log?.length ?? 0) === 0 && demoFallbackEnabled());
+    const merged = emptyOrDemo(data?.audit_log, DEMO_AUDIT, demoEnabled);
+    setUsingDemo((data?.audit_log?.length ?? 0) === 0 && demoEnabled);
     setEntries(merged.slice(0, Math.min(l, merged.length)));
     setLoading(false);
   };
 
   useEffect(() => {
     load(limit);
-  }, [limit]); // eslint-disable-line
+  }, [limit, demoEnabled]); // eslint-disable-line
 
   const stats = useMemo(() => {
     const ok = entries.filter((e) => e.result === "success").length;

@@ -57,24 +57,38 @@ class LSTMFallDetector:
         self.scaler_path = str(scaler_path or LSTM_SCALER_PATH)
         self.pose_model_path = str(pose_model_path or DEFAULT_MODEL_PATH)
 
-        if not Path(self.model_path).exists():
+        # LSTM artifacts are committed to git (they're small: ~600KB + 2KB),
+        # so the most common cause of them being missing is a partial clone or
+        # an accidental delete. Point users at git first; training is a fallback.
+        _missing = [p for p in (self.model_path, self.scaler_path) if not Path(p).exists()]
+        if _missing:
             raise FileNotFoundError(
-                f"LSTM model not found at '{self.model_path}'.\n"
-                "Train it with: python3.11 scripts/train_lstm.py"
+                "LSTM fall-detection artifacts missing:\n"
+                + "\n".join(f"  - {m}" for m in _missing)
+                + "\n\nThese files ship with the repository. Restore them with:\n"
+                "  git checkout -- Implementation/models/fall_lstm.keras \\\n"
+                "                   Implementation/models/fall_lstm_scaler.pkl\n\n"
+                "Or, if you have a URFD dataset in data/urfd/, re-train them:\n"
+                "  python3.11 scripts/train_lstm.py\n\n"
+                "If neither is possible, the Phase-1 rules-based detector "
+                "(FallDetector) will continue to work without these files."
             )
-        if not Path(self.scaler_path).exists():
-            raise FileNotFoundError(
-                f"Scaler not found at '{self.scaler_path}'.\n"
-                "Train it with: python3.11 scripts/train_lstm.py"
+        # Auto-download the pose model if missing (shared helper in fall_detection.py)
+        from models.fall_detection import _download_pose_model, POSE_MODEL_URL, _MIN_MODEL_BYTES
+        pose_path_obj = Path(self.pose_model_path)
+        if not pose_path_obj.exists() or pose_path_obj.stat().st_size < _MIN_MODEL_BYTES:
+            logger.warning(
+                "Pose model missing or incomplete at '%s' — attempting download.",
+                self.pose_model_path,
             )
-        if not Path(self.pose_model_path).exists():
-            raise FileNotFoundError(
-                f"MediaPipe pose model not found at '{self.pose_model_path}'.\n"
-                "Download it once with:\n"
-                "  curl -L -o models/pose_landmarker.task \\\n"
-                "    https://storage.googleapis.com/mediapipe-models/"
-                "pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"
-            )
+            if not _download_pose_model(pose_path_obj):
+                raise FileNotFoundError(
+                    f"MediaPipe pose model not found at '{self.pose_model_path}' "
+                    "and auto-download failed (check network / proxy).\n"
+                    "Download it manually with:\n"
+                    "  curl -L -o models/pose_landmarker.task \\\n"
+                    f"    {POSE_MODEL_URL}"
+                )
 
         import json
         import pickle

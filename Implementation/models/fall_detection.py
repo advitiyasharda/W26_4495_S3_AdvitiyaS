@@ -25,6 +25,9 @@ Phase 2 plan:
 
 import math
 import logging
+import os
+import urllib.request
+import urllib.error
 from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +39,57 @@ logger = logging.getLogger(__name__)
 
 # Default model path (relative to project root, i.e. Implementation/)
 DEFAULT_MODEL_PATH = Path(__file__).parent / "pose_landmarker.task"
+
+# Canonical MediaPipe pose-landmarker download URL.
+POSE_MODEL_URL = (
+    "https://storage.googleapis.com/mediapipe-models/"
+    "pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"
+)
+_MIN_MODEL_BYTES = 1_000_000  # file is ~9MB; anything smaller is corrupt/placeholder
+
+
+def _download_pose_model(dest: Path, url: str = POSE_MODEL_URL) -> bool:
+    """
+    Attempt to download the MediaPipe pose model to `dest`.
+
+    Returns True on success, False on any failure (network/IO).  The caller
+    decides whether a failure should be fatal.  Skip by setting the env
+    var SKIP_POSE_MODEL_DOWNLOAD=1 (useful in offline CI).
+    """
+    if os.environ.get("SKIP_POSE_MODEL_DOWNLOAD") == "1":
+        logger.info("SKIP_POSE_MODEL_DOWNLOAD=1 set — not downloading pose model.")
+        return False
+
+    dest.parent.mkdir(parents=True, exist_ok=True)
+    tmp = dest.with_suffix(dest.suffix + ".part")
+    logger.info("Downloading MediaPipe pose model → %s", dest)
+    logger.info("Source: %s", url)
+    try:
+        with urllib.request.urlopen(url, timeout=60) as resp, open(tmp, "wb") as out:
+            total = 0
+            while True:
+                chunk = resp.read(64 * 1024)
+                if not chunk:
+                    break
+                out.write(chunk)
+                total += len(chunk)
+        if total < _MIN_MODEL_BYTES:
+            logger.warning("Downloaded pose model is only %d bytes — rejecting as corrupt.", total)
+            try:
+                tmp.unlink()
+            except FileNotFoundError:
+                pass
+            return False
+        tmp.replace(dest)
+        logger.info("Pose model ready (%.1f MB).", total / 1024 / 1024)
+        return True
+    except (urllib.error.URLError, OSError, TimeoutError) as e:
+        logger.warning("Pose model download failed: %s", e)
+        try:
+            tmp.unlink()
+        except FileNotFoundError:
+            pass
+        return False
 
 # ── MediaPipe landmark indices ──────────────────────────────────────────────
 NOSE           = 0
@@ -92,15 +146,23 @@ class FallDetector:
                  velocity_window: int  = VELOCITY_WINDOW):
 
         model_path = model_path or str(DEFAULT_MODEL_PATH)
+        model_path_obj = Path(model_path)
 
-        if not Path(model_path).exists():
-            raise FileNotFoundError(
-                f"MediaPipe pose model not found at '{model_path}'.\n"
-                "Download it once with:\n"
-                "  curl -L -o models/pose_landmarker.task \\\n"
-                "    https://storage.googleapis.com/mediapipe-models/"
-                "pose_landmarker/pose_landmarker_full/float16/1/pose_landmarker_full.task"
+        # Auto-download the pose model on first use so every entry point
+        # (Flask server, camera scripts, tests) works without manual setup.
+        if not model_path_obj.exists() or model_path_obj.stat().st_size < _MIN_MODEL_BYTES:
+            logger.warning(
+                "Pose model missing or incomplete at '%s' — attempting download.",
+                model_path,
             )
+            if not _download_pose_model(model_path_obj):
+                raise FileNotFoundError(
+                    f"MediaPipe pose model not found at '{model_path}' and "
+                    "auto-download failed (check network / proxy).\n"
+                    "Download it manually with:\n"
+                    "  curl -L -o models/pose_landmarker.task \\\n"
+                    f"    {POSE_MODEL_URL}"
+                )
 
         try:
             import mediapipe as mp

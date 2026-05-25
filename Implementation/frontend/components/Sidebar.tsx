@@ -1,8 +1,10 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
+import { useDemoMode } from "@/lib/useDemoMode";
 import {
   IconAuditTrail,
   IconBell,
@@ -120,6 +122,7 @@ function NavSeparator() {
 export default function Sidebar() {
   const pathname = usePathname();
   const [collapsed, setCollapsed] = useState(true);
+  const { demoEnabled, toggle } = useDemoMode();
 
   return (
     <aside
@@ -133,8 +136,15 @@ export default function Sidebar() {
           collapsed ? "justify-center px-2" : "px-4"
         }`}
       >
-        <div className="flex-shrink-0 w-9 h-9 rounded-xl bg-gradient-to-br from-teal-300/85 via-cyan-300/80 to-violet-200/90 flex items-center justify-center text-white shadow-sm ring-1 ring-teal-200/35">
-          {icons.door}
+        <div className="flex-shrink-0 w-9 h-9 rounded-xl overflow-hidden shadow-sm ring-1 ring-slate-200/60">
+          <Image
+            src="/doorface-icon.png"
+            alt="Door Face Panels"
+            width={36}
+            height={36}
+            className="w-full h-full object-cover"
+            priority
+          />
         </div>
         {!collapsed && (
           <div className="min-w-0">
@@ -182,26 +192,64 @@ export default function Sidebar() {
         ))}
       </nav>
 
-      {/* User profile */}
-      <div className="border-t border-slate-100 p-3">
+      {/* User profile + demo toggle */}
+      <div className="border-t border-slate-100 p-3 space-y-2">
+        {/* Avatar row */}
         <div
           className={`flex items-center gap-3 px-2 py-2 rounded-xl bg-slate-50/80 ${
             collapsed ? "justify-center" : ""
           }`}
         >
-          <div className="flex-shrink-0 w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500">
-            {icons.user}
+          <div className="relative flex-shrink-0">
+            <div className="w-9 h-9 rounded-full bg-white border border-slate-200 flex items-center justify-center text-slate-500">
+              {icons.user}
+            </div>
+            {/* Collapsed-state demo indicator dot */}
+            {collapsed && (
+              <span
+                title={demoEnabled ? "Demo data ON" : "Demo data OFF"}
+                className={`absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 rounded-full border-2 border-white transition-colors ${
+                  demoEnabled ? "bg-violet-500" : "bg-slate-300"
+                }`}
+              />
+            )}
           </div>
           {!collapsed && (
             <div className="min-w-0">
               <p className="text-sm font-medium text-slate-700 truncate">Admin</p>
               <p className="text-xs text-slate-400 truncate">Caregiver Dashboard</p>
-              <Link href="/demo" className="text-[11px] font-semibold text-violet-700 hover:underline mt-1 inline-block">
-                Open Demo Center
-              </Link>
             </div>
           )}
         </div>
+
+        {/* Demo data toggle — only visible when expanded */}
+        {!collapsed && (
+          <div className="flex items-center gap-3 px-2 py-1.5 rounded-lg bg-slate-50/60 ring-1 ring-slate-100">
+            {/* Toggle switch — left-aligned, matching avatar column width */}
+            <button
+              type="button"
+              role="switch"
+              aria-checked={demoEnabled}
+              aria-label="Toggle demo data"
+              onClick={toggle}
+              className={`relative flex-shrink-0 w-9 h-5 rounded-full overflow-hidden transition-colors duration-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-violet-400 ${
+                demoEnabled ? "bg-violet-500" : "bg-slate-200"
+              }`}
+            >
+              <span
+                className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${
+                  demoEnabled ? "translate-x-4" : "translate-x-0"
+                }`}
+              />
+            </button>
+            <div className="min-w-0 leading-none">
+              <span className="text-[11px] font-semibold text-slate-600 block">Demo data</span>
+              <span className={`text-[10px] font-medium ${demoEnabled ? "text-violet-500" : "text-slate-400"}`}>
+                {demoEnabled ? "ON — sample data" : "OFF — live only"}
+              </span>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Collapse toggle */}

@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -35,23 +36,23 @@ def _demo_process_registry():
 DEMO_TOOLS = {
     "face-register": {
         "label": "Face registration capture",
-        "command": ["python3", "scripts/capture_faces.py", "--person", "demo_user", "--photos", "40"],
+        "command": [sys.executable, "scripts/capture_faces.py", "--person", "demo_user", "--photos", "40"],
         "kind": "camera",
     },
     "face-test": {
         "label": "Face recognition test interface",
-        "command": ["python3", "tests/test_api_recognize.py", "--continuous"],
+        "command": [sys.executable, "tests/test_api_recognize.py", "--continuous"],
         "kind": "camera",
     },
     "fall-test": {
         "label": "Fall detection interface",
-        "command": ["python3", "scripts/fall_detection_camera.py"],
+        "command": [sys.executable, "scripts/fall_detection_camera.py"],
         "kind": "camera",
     },
     "object-test": {
         "label": "Object detection interface",
         "command": [
-            "python3",
+            sys.executable,
             "scripts/test_object_detection_camera_live.py",
             "--base-model",
             "yolo26l.pt",
@@ -72,7 +73,15 @@ def _stop_demo_tool(tool_id: str):
         return False
     if proc.poll() is None:
         try:
-            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
+            if sys.platform == "win32":
+                # On Windows kill the whole process tree via taskkill
+                subprocess.call(
+                    ["taskkill", "/F", "/T", "/PID", str(proc.pid)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            else:
+                os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         except Exception:
             try:
                 proc.terminate()
@@ -655,7 +664,7 @@ def start_demo_tool(tool_id: str):
 
             person_folder = _slugify_person(name)
             command = [
-                "python3",
+                sys.executable,
                 "scripts/capture_faces.py",
                 "--person",
                 person_folder,
@@ -683,14 +692,20 @@ def start_demo_tool(tool_id: str):
         # Restart this tool if already running/stale.
         _stop_demo_tool(tool_id)
 
-        proc = subprocess.Popen(
-            command,
-            cwd=str(PROJECT_ROOT),
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            stdin=subprocess.DEVNULL,
-            start_new_session=True,
-        )
+        popen_kwargs: dict = {
+            "cwd": str(PROJECT_ROOT),
+            "stdout": subprocess.DEVNULL,
+            "stderr": subprocess.DEVNULL,
+            "stdin": subprocess.DEVNULL,
+        }
+        if sys.platform == "win32":
+            # Windows: create a new process group so we can terminate the
+            # whole tree with taskkill later.
+            popen_kwargs["creationflags"] = subprocess.CREATE_NEW_PROCESS_GROUP
+        else:
+            # POSIX: new session lets us killpg the whole child group.
+            popen_kwargs["start_new_session"] = True
+        proc = subprocess.Popen(command, **popen_kwargs)
         registry[tool_id] = proc
 
         return jsonify({
